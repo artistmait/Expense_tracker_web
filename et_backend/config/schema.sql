@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS transactions (
 -- ----------------------------------------------------------
 -- INDEXES FOR FAST QUERYING
 -- ----------------------------------------------------------
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);
@@ -83,6 +85,10 @@ CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_category_id ON transactions(category_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_t_date ON transactions(t_date);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_active_date ON transactions(user_id, t_date DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_transactions_desc_trgm ON transactions USING gin (t_desc gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_transactions_amount ON transactions(amount);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(transaction_type);
 
 -- ----------------------------------------------------------
 -- SEED DEFAULT SYSTEM CATEGORIES
@@ -195,6 +201,26 @@ CREATE TABLE IF NOT EXISTS monthly_summaries (
 CREATE INDEX IF NOT EXISTS idx_budgets_user_id ON budgets(user_id);
 CREATE INDEX IF NOT EXISTS idx_budgets_category_id ON budgets(category_id);
 CREATE INDEX IF NOT EXISTS idx_monthly_summaries_user_period ON monthly_summaries(user_id, month_period);
+
+-- ----------------------------------------------------------
+-- 7. BUDGET ALERT LOG TABLE (Block 2.1c)
+-- Tracks which threshold alerts have already been sent per
+-- user / category / period to prevent duplicate notifications.
+-- rule_code: 'BUDGET_ALERT_80' | 'BUDGET_ALERT_100'
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS budget_alert_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    category_id UUID REFERENCES categories(id) ON DELETE CASCADE,
+    period VARCHAR(7) NOT NULL,           -- 'YYYY-MM'
+    rule_code VARCHAR(30) NOT NULL,       -- 'BUDGET_ALERT_80' | 'BUDGET_ALERT_100'
+    fired_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_alert_per_period UNIQUE(user_id, category_id, period, rule_code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_budget_alert_log_user ON budget_alert_log(user_id, period);
+
+
 
 -- ----------------------------------------------------------
 -- SEED INITIAL BUDGETS FOR DEMO USERS

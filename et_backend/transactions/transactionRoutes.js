@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getTransactions,
   createTransaction,
+  updateTransaction,
   updateTransactionCategory,
   syncTransactions,
   deleteTransaction
@@ -16,6 +17,7 @@ router.use(verifyToken);
 router.get('/', getTransactions);
 router.post('/', createTransaction);
 router.post('/sync', syncTransactions);
+router.put('/:id', updateTransaction);
 router.put('/:id/category', updateTransactionCategory);
 router.delete('/:id', deleteTransaction);
 

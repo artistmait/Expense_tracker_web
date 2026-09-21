@@ -7,17 +7,22 @@ import {
   Tag,
   Building,
   Sparkles,
-  Check
+  Check,
+  ArrowRight,
+  Receipt
 } from 'lucide-react';
+import { useCurrency } from '../../context/CurrencyContext';
 
 export const LedgerTable = ({
   transactions = [],
   categories = [],
   onAddTransaction,
   onUpdateCategory,
-  onSyncTrigger
+  onSyncTrigger,
+  onViewAllExpenses
 }) => {
   const [editingTxId, setEditingTxId] = useState(null);
+  const { formatAmount } = useCurrency();
 
   const defaultCategoriesList = [
     { id: 'cat-housing',   category_name: 'Housing & Utilities',        cat_colour: '#112E81' },
@@ -50,58 +55,71 @@ export const LedgerTable = ({
         <div>
           <div className="flex items-center space-x-2">
             <h3 className="text-sm sm:text-base font-bold text-[#112E81] dark:text-[#E6EDF3] tracking-tight">
-              Granular Recent Ledger / Transactions
+              Recent Expenses Overview
             </h3>
             <span className="text-[10px] font-semibold text-[#4382DF] bg-[#AACCD6]/25 dark:bg-[#4382DF]/10 px-2 py-0.5 rounded-full border border-[#4382DF]/20 flex items-center gap-1">
               <Sparkles className="w-2.5 h-2.5" />
-              Categorization Enabled
+              Live Ledger
             </span>
           </div>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-            Real-time feeds synced from Mock Bank API • Click any category pill to rearrange manually
+            Latest transaction activity • Manage full search, filters, edits and additions in the Expenses tab
           </p>
         </div>
 
         <div className="flex items-center space-x-2">
-          {onSyncTrigger && (
+          {onViewAllExpenses && (
             <button
-              onClick={onSyncTrigger}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#4382DF] hover:bg-[#112E81] text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer"
+              onClick={onViewAllExpenses}
+              className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-[#4382DF]/10 hover:bg-[#4382DF]/20 text-xs font-bold text-[#4382DF] transition-all cursor-pointer"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Sync Feed</span>
+              <span>View All in Expenses</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           )}
-          <button
-            onClick={onAddTransaction}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-[#1C2333] hover:bg-[#AACCD6]/30 dark:hover:bg-[#252D40] text-xs font-semibold text-[#112E81] dark:text-[#E6EDF3] transition-all cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5 text-[#4382DF]" />
-            <span>New Entry</span>
-          </button>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto min-h-[220px]">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-slate-100 dark:border-[#30363D] text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-              <th className="pb-3 font-semibold">
-                <span className="inline-flex items-center gap-1">Merchant / Source <ArrowUpDown className="w-3 h-3 text-slate-300 dark:text-slate-600" /></span>
-              </th>
-              <th className="pb-3 font-semibold">
-                <span className="inline-flex items-center gap-1">Category (Editable) <ArrowUpDown className="w-3 h-3 text-slate-300 dark:text-slate-600" /></span>
-              </th>
-              <th className="pb-3 font-semibold">
-                <span className="inline-flex items-center gap-1">Payment Method / Feed <ArrowUpDown className="w-3 h-3 text-slate-300 dark:text-slate-600" /></span>
-              </th>
-              <th className="pb-3 font-semibold">Bill Status</th>
-              <th className="pb-3 font-semibold text-right">Amount</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-[#30363D] text-xs">
-            {transactions.map((item, idx) => {
+      {/* Table or Empty State */}
+      {transactions.length === 0 ? (
+        <div className="py-10 text-center space-y-2.5 border border-dashed border-slate-200 dark:border-[#30363D] rounded-xl">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-[#1C2333] flex items-center justify-center mx-auto text-slate-400">
+            <Receipt className="w-5 h-5" />
+          </div>
+          <div className="text-xs font-bold text-slate-700 dark:text-slate-300">No transactions recorded yet</div>
+          <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+            Your expense ledger is empty. Go to the Expenses tab to record a new expense or sync your bank account.
+          </p>
+          {onViewAllExpenses && (
+            <button
+              onClick={onViewAllExpenses}
+              className="inline-flex items-center gap-1 mt-1 text-xs font-bold text-[#4382DF] hover:underline cursor-pointer"
+            >
+              <span>Go to Expenses Tab</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="overflow-x-auto min-h-[220px]">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-[#30363D] text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                <th className="pb-3 font-semibold">
+                  <span className="inline-flex items-center gap-1">Merchant / Source <ArrowUpDown className="w-3 h-3 text-slate-300 dark:text-slate-600" /></span>
+                </th>
+                <th className="pb-3 font-semibold">
+                  <span className="inline-flex items-center gap-1">Category (Editable) <ArrowUpDown className="w-3 h-3 text-slate-300 dark:text-slate-600" /></span>
+                </th>
+                <th className="pb-3 font-semibold">
+                  <span className="inline-flex items-center gap-1">Payment Method / Feed <ArrowUpDown className="w-3 h-3 text-slate-300 dark:text-slate-600" /></span>
+                </th>
+                <th className="pb-3 font-semibold">Bill Status</th>
+                <th className="pb-3 font-semibold text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-[#30363D] text-xs">
+              {transactions.slice(0, 5).map((item, idx) => {
               const isExpense = Number(item.amount) < 0 || item.transaction_type === 'expense';
               const displayAmount = Math.abs(Number(item.amount || 0));
               const merchantName = item.merchant || item.title || item.t_desc || 'Transaction';
@@ -187,11 +205,11 @@ export const LedgerTable = ({
                   <td className="py-3.5 text-right font-mono font-bold whitespace-nowrap">
                     {isExpense ? (
                       <span className="text-slate-800 dark:text-[#E6EDF3]">
-                        -${displayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        -{formatAmount(displayAmount)}
                       </span>
                     ) : (
                       <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                        +${displayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        +{formatAmount(displayAmount)}
                       </span>
                     )}
                   </td>
@@ -202,6 +220,7 @@ export const LedgerTable = ({
           </tbody>
         </table>
       </div>
+      )}
 
     </div>
   );

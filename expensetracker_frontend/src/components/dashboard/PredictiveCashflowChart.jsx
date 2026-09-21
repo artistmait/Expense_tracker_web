@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
+import { useCurrency } from '../../context/CurrencyContext';
 
 export const PredictiveCashflowChart = () => {
   const [activePoint, setActivePoint] = useState({
     month: 'Apr',
     inflow: 8150.00,
     outflow: 4202.00,
-    x: 48, // percent
+    x: 48,
     yTop: 42,
     yBottom: 68
   });
+  const { symbol, convertFromUSD } = useCurrency();
 
   const monthsData = [
     { month: 'Jan', inflow: 5800, outflow: 3400, x: 8, yTop: 60, yBottom: 78 },
@@ -53,14 +55,14 @@ export const PredictiveCashflowChart = () => {
       <div className="relative w-full h-64 sm:h-72 select-none">
         
         {/* Y-Axis scale numbers */}
-        <div className="absolute left-0 top-0 bottom-6 w-12 flex flex-col justify-between text-[11px] font-mono text-slate-400 dark:text-slate-500 pr-2 text-right pointer-events-none">
-          <span>$12,000</span>
-          <span>$10,000</span>
-          <span>$8,000</span>
-          <span>$6,000</span>
-          <span>$4,000</span>
-          <span>$2,000</span>
-          <span>$0</span>
+        <div className="absolute left-0 top-0 bottom-6 w-14 flex flex-col justify-between text-[11px] font-mono text-slate-400 dark:text-slate-500 pr-2 text-right pointer-events-none">
+          <span>{symbol}{Math.round(convertFromUSD(12000)).toLocaleString()}</span>
+          <span>{symbol}{Math.round(convertFromUSD(10000)).toLocaleString()}</span>
+          <span>{symbol}{Math.round(convertFromUSD(8000)).toLocaleString()}</span>
+          <span>{symbol}{Math.round(convertFromUSD(6000)).toLocaleString()}</span>
+          <span>{symbol}{Math.round(convertFromUSD(4000)).toLocaleString()}</span>
+          <span>{symbol}{Math.round(convertFromUSD(2000)).toLocaleString()}</span>
+          <span>{symbol}0</span>
         </div>
 
         {/* Main Chart Graphic */}
@@ -172,9 +174,9 @@ export const PredictiveCashflowChart = () => {
                 {activePoint.month} Forecast
               </div>
               <div className="flex items-center space-x-2 text-xs font-mono font-bold mt-0.5">
-                <span className="text-[#AACCD6] font-extrabold">${activePoint.outflow.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                <span className="text-[#AACCD6] font-extrabold">{symbol}{Math.round(convertFromUSD(activePoint.outflow)).toLocaleString()}</span>
                 <span className="text-slate-300 dark:text-slate-600">/</span>
-                <span className="text-[#4382DF] font-extrabold">${activePoint.inflow.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                <span className="text-[#4382DF] font-extrabold">{symbol}{Math.round(convertFromUSD(activePoint.inflow)).toLocaleString()}</span>
               </div>
             </div>
           </div>

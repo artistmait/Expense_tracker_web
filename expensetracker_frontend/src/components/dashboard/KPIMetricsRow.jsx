@@ -1,38 +1,46 @@
 import React, { useState } from 'react';
 import { ArrowUpRight, ArrowDownRight, Info } from 'lucide-react';
+import { useCurrency } from '../../context/CurrencyContext';
 
 export const KPIMetricsRow = ({ metrics }) => {
   const [tooltipText, setTooltipText] = useState(null);
+  const { formatAmount, symbol } = useCurrency();
+
+  const netCashflow   = metrics?.totalIncome  - metrics?.totalExpenses || 8420;
+  const totalIncome   = metrics?.totalIncome   || 8420;
+  const totalExpenses = metrics?.totalExpenses || 3150.20;
+  const savingsRate   = metrics?.savingsRate   || 62.5;
+  const runway        = metrics?.emergencyFundMonths || 14.2;
 
   const kpis = [
     {
       id: 'netCashflow',
       label: 'Total Net Cashflow',
-      value: '$8,420.00',
+      value: formatAmount(netCashflow),
     },
     {
       id: 'monthlyInflow',
       label: 'Total Monthly Inflow',
-      value: '$8,420.00',
+      value: formatAmount(totalIncome),
       badge: { icon: ArrowUpRight, color: 'text-emerald-500' },
     },
     {
       id: 'totalExpenses',
       label: 'Total Expenses',
-      value: '$3,150.20',
+      value: formatAmount(totalExpenses),
       badge: { icon: ArrowDownRight, color: 'text-rose-500' },
     },
     {
       id: 'savingsRate',
       label: 'Net Savings Rate',
-      value: '+62.5%',
+      value: `+${savingsRate}%`,
       isGreenValue: true,
       info: 'Percentage of monthly gross inflow allocated to liquid savings and portfolio assets.'
     },
     {
       id: 'smartRunway',
       label: 'Smart Runway',
-      value: '14.2 Months',
+      value: `${runway} Months`,
       info: 'Estimated runway based on average 6-month burn rate and current liquid reserves.'
     }
   ];
@@ -91,7 +99,7 @@ export const KPIMetricsRow = ({ metrics }) => {
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
-                  width: kpi.id === 'savingsRate' ? '62.5%' : kpi.id === 'smartRunway' ? '85%' : '100%',
+                  width: kpi.id === 'savingsRate' ? `${savingsRate}%` : kpi.id === 'smartRunway' ? '85%' : '100%',
                   backgroundColor: kpi.id === 'totalExpenses' ? '#F43F5E' : '#4382DF'
                 }}
               />

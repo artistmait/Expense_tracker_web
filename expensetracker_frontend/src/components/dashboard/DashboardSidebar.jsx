@@ -19,7 +19,7 @@ export const DashboardSidebar = ({ activeNav, onSelectNav }) => {
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { id: 'analytics', icon: BarChart3, label: 'Analytics' },
     { id: 'accounts', icon: CreditCard, label: 'Accounts' },
-    { id: 'ledger', icon: Receipt, label: 'Ledger' },
+    { id: 'expenses', icon: Receipt, label: 'Expenses' },
     { id: 'planning', icon: PieChart, label: 'Budgets' },
     { id: 'settings', icon: Settings, label: 'Settings' },
   ];

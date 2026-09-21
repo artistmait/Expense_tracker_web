@@ -1,16 +1,144 @@
 import { query } from '../config/db.js';
 import { syncBankFeedForUser } from '../services/bankSyncService.js';
+import { checkBudgetAlerts } from '../budgets/budgetAlertService.js';
 
 // -------------------------------------------------------------
 // GET /api/transactions
-// List all user transactions with joined category & account data
+// List user transactions with joined category & account data,
+// supporting full-text search, multi-attribute filtering & server pagination
 // -------------------------------------------------------------
 export const getTransactions = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { account_id, category_id, type, limit, search } = req.query;
+    const {
+      account_id,
+      category_id,
+      type,
+      start_date,
+      end_date,
+      min_amount,
+      max_amount,
+      search,
+      page = 1,
+      limit = 20,
+      sort_by = 't_date',
+      sort_order = 'DESC'
+    } = req.query;
 
-    let sql = `
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+    const offset = (pageNum - 1) * limitNum;
+
+    // Base filter condition
+    let whereClauses = ['t.user_id = $1', 't.deleted_at IS NULL'];
+    const params = [userId];
+    let paramIndex = 2;
+
+    // Multi-account filter (support comma-separated or single)
+    if (account_id) {
+      const accountIds = account_id.includes(',')
+        ? account_id.split(',').map(s => s.trim()).filter(Boolean)
+        : [account_id.trim()];
+      if (accountIds.length === 1) {
+        whereClauses.push(`t.account_id = $${paramIndex++}`);
+        params.push(accountIds[0]);
+      } else if (accountIds.length > 1) {
+        whereClauses.push(`t.account_id = ANY($${paramIndex++}::uuid[])`);
+        params.push(accountIds);
+      }
+    }
+
+    // Multi-category filter (support comma-separated or single)
+    if (category_id) {
+      const categoryIds = category_id.includes(',')
+        ? category_id.split(',').map(s => s.trim()).filter(Boolean)
+        : [category_id.trim()];
+      if (categoryIds.length === 1) {
+        whereClauses.push(`t.category_id = $${paramIndex++}`);
+        params.push(categoryIds[0]);
+      } else if (categoryIds.length > 1) {
+        whereClauses.push(`t.category_id = ANY($${paramIndex++}::uuid[])`);
+        params.push(categoryIds);
+      }
+    }
+
+    // Transaction Type (expense, income, transfer, or multiple)
+    if (type) {
+      const types = type.includes(',')
+        ? type.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+        : [type.trim().toLowerCase()];
+      if (types.length === 1 && types[0] !== 'all') {
+        whereClauses.push(`t.transaction_type = $${paramIndex++}`);
+        params.push(types[0]);
+      } else if (types.length > 1) {
+        whereClauses.push(`t.transaction_type = ANY($${paramIndex++}::varchar[])`);
+        params.push(types);
+      }
+    }
+
+    // Date range filter
+    if (start_date) {
+      whereClauses.push(`t.t_date >= $${paramIndex++}`);
+      params.push(start_date);
+    }
+    if (end_date) {
+      whereClauses.push(`t.t_date <= $${paramIndex++}`);
+      params.push(end_date);
+    }
+
+    // Amount range filter
+    if (min_amount !== undefined && min_amount !== '') {
+      const minNum = parseFloat(min_amount);
+      if (!isNaN(minNum)) {
+        whereClauses.push(`t.amount >= $${paramIndex++}`);
+        params.push(minNum);
+      }
+    }
+    if (max_amount !== undefined && max_amount !== '') {
+      const maxNum = parseFloat(max_amount);
+      if (!isNaN(maxNum)) {
+        whereClauses.push(`t.amount <= $${paramIndex++}`);
+        params.push(maxNum);
+      }
+    }
+
+    // Full-text search across description, merchant, category, account
+    if (search && search.trim()) {
+      const q = `%${search.trim().toLowerCase()}%`;
+      whereClauses.push(`(
+        LOWER(t.t_desc) LIKE $${paramIndex}
+        OR LOWER(COALESCE(c.category_name, '')) LIKE $${paramIndex}
+        OR LOWER(a.account_name) LIKE $${paramIndex}
+      )`);
+      params.push(q);
+      paramIndex++;
+    }
+
+    const whereString = whereClauses.join(' AND ');
+
+    // 1. Count query for total pagination
+    const countSql = `
+      SELECT COUNT(*)::int AS total
+      FROM transactions t
+      JOIN accounts a ON t.account_id = a.id
+      LEFT JOIN categories c ON t.category_id = c.id
+      WHERE ${whereString}
+    `;
+    const countResult = await query(countSql, params);
+    const total = countResult.rows[0]?.total || 0;
+
+    // 2. Data query with safe sort and pagination
+    const validSortFields = {
+      t_date: 't.t_date',
+      amount: 't.amount',
+      created_at: 't.created_at',
+      t_desc: 't.t_desc'
+    };
+    const sortColumn = validSortFields[sort_by] || 't.t_date';
+    const orderDirection = sort_order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+    const dataParams = [...params, limitNum, offset];
+    const dataSql = `
       SELECT 
         t.id,
         t.amount,
@@ -31,45 +159,20 @@ export const getTransactions = async (req, res) => {
       FROM transactions t
       JOIN accounts a ON t.account_id = a.id
       LEFT JOIN categories c ON t.category_id = c.id
-      WHERE t.user_id = $1 AND t.deleted_at IS NULL
+      WHERE ${whereString}
+      ORDER BY ${sortColumn} ${orderDirection}, t.created_at DESC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
 
-    const params = [userId];
-    let paramIndex = 2;
-
-    if (account_id) {
-      sql += ` AND t.account_id = $${paramIndex++}`;
-      params.push(account_id);
-    }
-
-    if (category_id) {
-      sql += ` AND t.category_id = $${paramIndex++}`;
-      params.push(category_id);
-    }
-
-    if (type) {
-      sql += ` AND t.transaction_type = $${paramIndex++}`;
-      params.push(type);
-    }
-
-    if (search) {
-      sql += ` AND (LOWER(t.t_desc) LIKE $${paramIndex} OR LOWER(COALESCE(c.category_name, '')) LIKE $${paramIndex})`;
-      params.push(`%${search.toLowerCase()}%`);
-      paramIndex++;
-    }
-
-    sql += ` ORDER BY t.t_date DESC, t.created_at DESC`;
-
-    if (limit) {
-      sql += ` LIMIT $${paramIndex++}`;
-      params.push(parseInt(limit, 10));
-    }
-
-    const result = await query(sql, params);
+    const result = await query(dataSql, dataParams);
+    const totalPages = Math.ceil(total / limitNum) || 1;
 
     return res.status(200).json({
       success: true,
-      total: result.rows.length,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages,
       transactions: result.rows
     });
   } catch (err) {
@@ -139,10 +242,19 @@ export const createTransaction = async (req, res) => {
       dateVal
     ]);
 
+    const savedTx = result.rows[0];
+
+    // BLOCK 2.1c: Check budget thresholds after expense is saved
+    let budgetAlerts = [];
+    if (txType === 'expense' && savedTx.category_id) {
+      budgetAlerts = await checkBudgetAlerts(userId, savedTx.category_id, savedTx.t_date);
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Transaction recorded successfully.',
-      transaction: result.rows[0]
+      transaction: savedTx,
+      budget_alerts: budgetAlerts,
     });
   } catch (err) {
     console.error('[CreateTransaction Error]:', err);
@@ -194,6 +306,105 @@ export const updateTransactionCategory = async (req, res) => {
   } catch (err) {
     console.error('[UpdateCategory Error]:', err);
     return res.status(500).json({ success: false, message: 'Failed to update transaction category.' });
+  }
+};
+
+// -------------------------------------------------------------
+// PUT /api/transactions/:id
+// Full update of transaction fields
+// -------------------------------------------------------------
+export const updateTransaction = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const {
+      account_id,
+      category_id,
+      amount,
+      transaction_type,
+      t_desc,
+      is_reccuring,
+      t_date
+    } = req.body;
+
+    const check = await query(
+      'SELECT id, account_id, category_id, amount, transaction_type, t_desc, is_reccuring, t_date FROM transactions WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL',
+      [id, userId]
+    );
+
+    if (check.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Transaction not found.' });
+    }
+
+    const current = check.rows[0];
+    const newAmount = amount !== undefined && !isNaN(Number(amount)) ? Math.abs(parseFloat(amount)) : current.amount;
+    const newType = transaction_type ? transaction_type.toLowerCase() : current.transaction_type;
+    const newDesc = t_desc !== undefined && t_desc.trim().length > 0 ? t_desc.trim() : current.t_desc;
+    const newAccountId = account_id || current.account_id;
+    const newCategoryId = category_id !== undefined ? (category_id || null) : current.category_id;
+    const newDate = t_date || current.t_date;
+    const newRecurring = is_reccuring !== undefined ? !!is_reccuring : current.is_reccuring;
+
+    const updateSql = `
+      UPDATE transactions
+      SET 
+        amount = $1,
+        transaction_type = $2,
+        t_desc = $3,
+        account_id = $4,
+        category_id = $5,
+        t_date = $6,
+        is_reccuring = $7,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $8 AND user_id = $9
+      RETURNING *
+    `;
+
+    await query(updateSql, [
+      newAmount,
+      newType,
+      newDesc,
+      newAccountId,
+      newCategoryId,
+      newDate,
+      newRecurring,
+      id,
+      userId
+    ]);
+
+    const rowRes = await query(
+      `SELECT 
+        t.id, t.amount, t.transaction_type, t.t_desc, t.is_reccuring, t.t_date,
+        t.created_at, t.updated_at,
+        a.id AS account_id, a.account_name, a.account_type, a.currency,
+        c.id AS category_id,
+        COALESCE(c.category_name, 'Uncategorized') AS category_name,
+        COALESCE(c.cat_icon, 'Tag') AS cat_icon,
+        COALESCE(c.cat_colour, '#4382DF') AS cat_colour
+      FROM transactions t
+      JOIN accounts a ON t.account_id = a.id
+      LEFT JOIN categories c ON t.category_id = c.id
+      WHERE t.id = $1 AND t.user_id = $2`,
+      [id, userId]
+    );
+
+    const updatedTx = rowRes.rows[0];
+
+    // BLOCK 2.1c: Re-check budget thresholds after update
+    let budgetAlerts = [];
+    if (updatedTx?.transaction_type === 'expense' && updatedTx?.category_id) {
+      budgetAlerts = await checkBudgetAlerts(userId, updatedTx.category_id, updatedTx.t_date);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Transaction updated successfully.',
+      transaction: updatedTx,
+      budget_alerts: budgetAlerts,
+    });
+  } catch (err) {
+    console.error('[UpdateTransaction Error]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update transaction.' });
   }
 };
 

@@ -1,12 +1,19 @@
 const API_BASE_URL = 'http://localhost:5000/api';
 
 export const transactionsApi = {
-  // Fetch transactions from backend
+  // Fetch transactions from backend with search, filtering & pagination
   async getTransactions(token, queryParams = {}) {
     try {
       const url = new URL(`${API_BASE_URL}/transactions`);
       Object.keys(queryParams).forEach(key => {
-        if (queryParams[key]) url.searchParams.append(key, queryParams[key]);
+        const val = queryParams[key];
+        if (val !== undefined && val !== null && val !== '') {
+          if (Array.isArray(val)) {
+            if (val.length > 0) url.searchParams.append(key, val.join(','));
+          } else {
+            url.searchParams.append(key, val);
+          }
+        }
       });
 
       const res = await fetch(url.toString(), {
@@ -57,6 +64,43 @@ export const transactionsApi = {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to record entry');
+      return data;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  // Full transaction update (amount, desc, date, category, account)
+  async updateTransaction(token, transactionId, transactionData) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/transactions/${transactionId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(transactionData)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to update transaction');
+      return data;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  // Delete transaction (soft delete)
+  async deleteTransaction(token, transactionId) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/transactions/${transactionId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to delete transaction');
       return data;
     } catch (err) {
       throw err;

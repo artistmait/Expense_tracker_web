@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authApi } from '../services/authApi';
 import { useTheme } from './ThemeContext';
+import { useCurrency, LOCATION_CURRENCY_MAP } from './CurrencyContext';
 
 const AuthContext = createContext(null);
 
@@ -13,6 +14,7 @@ const DEFAULT_USER = {
   role: "Verified Member",
   accountsCount: 4,
   currency: "USD",
+  location: "United States",
   tier: "Wealth Platinum Member",
   accounts: [
     { id: 'acc-1', account_name: 'Chase Sapphire Checking', account_type: 'checking', initial_balance: 8420.00, currency: 'USD' },
@@ -23,6 +25,7 @@ const DEFAULT_USER = {
 
 export const AuthProvider = ({ children }) => {
   const { setTheme } = useTheme();
+  const { updateCurrency } = useCurrency();
   const [user, setUser] = useState(() => {
     try {
       const stored = localStorage.getItem('budgetmate_user');
@@ -61,6 +64,7 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (res.success && res.user) {
+        const userCurrency = res.user.accounts?.[0]?.currency || 'USD';
         const loggedInUser = {
           id: res.user.id,
           name: res.user.full_name || res.user.username,
@@ -70,11 +74,13 @@ export const AuthProvider = ({ children }) => {
           role: "Verified Member",
           accounts: res.user.accounts || [],
           accountsCount: res.user.accounts?.length || 1,
-          currency: res.user.accounts?.[0]?.currency || "USD",
+          currency: userCurrency,
+          location: res.user.location || 'United States',
           theme_preference: res.user.theme_preference || null,
         };
         setUser(loggedInUser);
         setToken(res.token);
+        updateCurrency(userCurrency);
         if (res.user.theme_preference) {
           setTheme(res.user.theme_preference, { syncServer: false });
         }
@@ -107,7 +113,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const signup = async ({ name, username, email, password, initialAccount, sync_mock_bank }) => {
+  const signup = async ({ name, username, email, password, initialAccount, sync_mock_bank, location }) => {
+    const resolvedCurrency = initialAccount?.currency || 'USD';
+    const resolvedLocation = location || 'United States';
     try {
       // Attempt backend API call
       const res = await authApi.register({
@@ -115,6 +123,7 @@ export const AuthProvider = ({ children }) => {
         full_name: name || "New Member",
         email: email,
         password: password,
+        location: resolvedLocation,
         initialAccount: initialAccount,
         sync_mock_bank: !!sync_mock_bank,
       });
@@ -129,10 +138,12 @@ export const AuthProvider = ({ children }) => {
           role: "Verified Member",
           accounts: res.user.accounts || [],
           accountsCount: res.user.accounts?.length || 1,
-          currency: res.user.accounts?.[0]?.currency || initialAccount?.currency || "USD",
+          currency: res.user.accounts?.[0]?.currency || resolvedCurrency,
+          location: resolvedLocation,
         };
         setUser(newUser);
         setToken(res.token);
+        updateCurrency(resolvedCurrency);
         setAuthModalOpen(false);
         return { success: true, bankSync: res.bankSync };
       }
@@ -143,19 +154,21 @@ export const AuthProvider = ({ children }) => {
         name: name || "Maitreyee Puranik",
         username: username || "maitreyee",
         email: email || "maitreyee.puranik@budgetmate.io",
-        currency: initialAccount?.currency || "USD",
+        currency: resolvedCurrency,
+        location: resolvedLocation,
         accounts: [
           {
             id: 'acc-init',
             account_name: initialAccount?.account_name || 'Chase Sapphire Checking',
             account_type: initialAccount?.account_type || 'checking',
             initial_balance: parseFloat(initialAccount?.initial_balance) || 8420.0,
-            currency: initialAccount?.currency || 'USD'
+            currency: resolvedCurrency
           }
         ]
       };
       setUser(newUser);
       setToken("mock_jwt_token");
+      updateCurrency(resolvedCurrency);
       setAuthModalOpen(false);
       return { success: true, isMock: true };
     }
@@ -222,6 +235,11 @@ export const AuthProvider = ({ children }) => {
     setUser((prev) => (prev ? { ...prev, theme_preference: theme } : null));
   };
 
+  const updateUserCurrency = (currencyCode, location) => {
+    updateCurrency(currencyCode);
+    setUser((prev) => prev ? { ...prev, currency: currencyCode, location: location || prev.location } : null);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -233,6 +251,7 @@ export const AuthProvider = ({ children }) => {
         updateUserProfile,
         changeUserPassword,
         updateUserTheme,
+        updateUserCurrency,
         loginDemo,
         logout,
         authModalOpen,

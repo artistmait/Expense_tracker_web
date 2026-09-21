@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   PieChart,
-  DollarSign,
   AlertTriangle,
   CheckCircle2,
   Sparkles,
@@ -10,6 +9,7 @@ import {
   Sliders,
   Wallet
 } from 'lucide-react';
+import { useCurrency } from '../../context/CurrencyContext';
 
 export const SetBudgetModal = ({
   isOpen,
@@ -24,6 +24,7 @@ export const SetBudgetModal = ({
   const [period, setPeriod] = useState('monthly');
   const [cashSource, setCashSource] = useState('all');
   const [saving, setSaving] = useState(false);
+  const { symbol, formatAmount, formatRaw } = useCurrency();
 
   // Initialize selected category when modal opens
   useEffect(() => {
@@ -132,10 +133,10 @@ export const SetBudgetModal = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
               <label className="block text-xs font-semibold text-[#112E81] dark:text-slate-300 mb-1.5">
-                Monthly Spending Limit ($)
+                Monthly Spending Limit ({symbol})
               </label>
               <div className="relative">
-                <DollarSign className="w-4 h-4 text-[#4382DF] absolute left-3 top-1/2 -translate-y-1/2" />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#4382DF] text-sm font-bold">{symbol}</span>
                 <input
                   type="number"
                   step="0.01"
@@ -204,10 +205,10 @@ export const SetBudgetModal = ({
 
             <div className="flex items-baseline justify-between text-xs sm:text-sm">
               <span className="font-medium text-slate-600 dark:text-slate-400">
-                Current Spend: <strong className="font-mono text-slate-900 dark:text-[#E6EDF3]">${currentSpent.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                Current Spend: <strong className="font-mono text-slate-900 dark:text-[#E6EDF3]">{formatRaw(currentSpent)}</strong>
               </span>
               <span className="font-medium text-slate-600 dark:text-slate-400">
-                Limit: <strong className="font-mono text-[#112E81] dark:text-[#4382DF]">${numericLimit.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                Limit: <strong className="font-mono text-[#112E81] dark:text-[#4382DF]">{formatRaw(numericLimit)}</strong>
               </span>
             </div>
 
@@ -229,7 +230,7 @@ export const SetBudgetModal = ({
             {isOver && (
               <div className="flex items-center space-x-1.5 text-xs text-rose-600 dark:text-rose-400 font-semibold pt-1">
                 <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                <span>Exceeds limit by ${(currentSpent - numericLimit).toLocaleString('en-US', { minimumFractionDigits: 2 })}! Over-budget threshold active.</span>
+                <span>Exceeds limit by {formatRaw(currentSpent - numericLimit)}! Over-budget threshold active.</span>
               </div>
             )}
             {isWarning && (
@@ -241,7 +242,7 @@ export const SetBudgetModal = ({
             {!isOver && !isWarning && numericLimit > 0 && (
               <div className="flex items-center space-x-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium pt-1">
                 <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span>Within safe allocation limits. ${(numericLimit - currentSpent).toLocaleString('en-US', { minimumFractionDigits: 2 })} remaining.</span>
+                <span>Within safe allocation limits. {formatRaw(numericLimit - currentSpent)} remaining.</span>
               </div>
             )}
           </div>

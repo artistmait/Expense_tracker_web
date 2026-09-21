@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useCurrency, CURRENCIES } from '../../context/CurrencyContext';
 import { ThemeToggle } from '../common/ThemeToggle';
 import {
   Building2,
@@ -8,16 +9,15 @@ import {
   Calendar,
   RotateCw,
   ChevronDown,
-  Plus,
   Check,
   LogOut
 } from 'lucide-react';
 
 export const DashboardTopNav = ({ onOpenQuickAdd, onSyncTrigger, onOpenSettings }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateUserCurrency } = useAuth();
+  const { currencyCode, currency, symbol, updateCurrency } = useCurrency();
 
   const [selectedAccount, setSelectedAccount] = useState('All Accounts (4 Connected)');
-  const [selectedCurrency, setSelectedCurrency] = useState('USD ($)');
   const [selectedPeriod, setSelectedPeriod] = useState('02 2024');
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncText, setLastSyncText] = useState('Updated 2m ago');
@@ -80,23 +80,42 @@ export const DashboardTopNav = ({ onOpenQuickAdd, onSyncTrigger, onOpenSettings 
           <button
             onClick={() => setCurrencyDropdownOpen(!currencyDropdownOpen)}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#1C2333] border border-slate-200 dark:border-[#30363D] hover:border-slate-300 text-xs font-medium text-slate-700 dark:text-slate-300 shadow-2xs transition-colors cursor-pointer"
+            title="Change active currency"
           >
-            <div className="w-4 h-4 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center text-amber-600 font-bold text-[10px]">$</div>
-            <span>Currency</span>
+            <span className="text-xs">{currency.flag}</span>
+            <span className="font-semibold">{currency.symbol} {currency.code}</span>
             <ChevronDown className="w-3 h-3 text-slate-400" />
           </button>
 
           {currencyDropdownOpen && (
-            <div className="absolute right-0 mt-1.5 w-36 bg-white dark:bg-[#1C2333] rounded-xl shadow-lg border border-slate-200 dark:border-[#30363D] py-1 z-50">
-              {['USD ($)', 'EUR (€)', 'GBP (£)', 'CAD ($)', 'AUD ($)'].map((curr) => (
-                <button
-                  key={curr}
-                  onClick={() => { setSelectedCurrency(curr); setCurrencyDropdownOpen(false); }}
-                  className="w-full text-left px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#252D40] hover:text-[#4382DF] cursor-pointer"
-                >
-                  {curr}
-                </button>
-              ))}
+            <div className="absolute right-0 mt-1.5 w-44 bg-white dark:bg-[#1C2333] rounded-xl shadow-lg border border-slate-200 dark:border-[#30363D] py-1 z-50 animate-fadeIn">
+              {Object.values(CURRENCIES).map((curr) => {
+                const isSelected = curr.code === currencyCode;
+                return (
+                  <button
+                    key={curr.code}
+                    onClick={() => {
+                      if (updateUserCurrency) {
+                        updateUserCurrency(curr.code);
+                      } else {
+                        updateCurrency(curr.code);
+                      }
+                      setCurrencyDropdownOpen(false);
+                    }}
+                    className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-[#252D40] flex items-center justify-between cursor-pointer ${
+                      isSelected ? 'text-[#4382DF] font-bold bg-[#4382DF]/10' : 'text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span>{curr.flag}</span>
+                      <span>{curr.name}</span>
+                    </span>
+                    <span className="font-mono font-bold text-[11px] text-slate-400 dark:text-slate-500">
+                      {curr.symbol}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -137,16 +156,7 @@ export const DashboardTopNav = ({ onOpenQuickAdd, onSyncTrigger, onOpenSettings 
           <span>Sync New ({lastSyncText})</span>
         </button>
 
-        {/* Quick Add */}
-        {onOpenQuickAdd && (
-          <button
-            onClick={onOpenQuickAdd}
-            className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-[#112E81] hover:bg-[#4647AE] text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Add Entry</span>
-          </button>
-        )}
+
 
         {/* Dark Mode Toggle */}
         <ThemeToggle />

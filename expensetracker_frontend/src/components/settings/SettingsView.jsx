@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useCurrency, CURRENCIES } from '../../context/CurrencyContext';
 import {
   User,
   Shield,
@@ -19,13 +20,15 @@ import {
   ExternalLink,
   Sun,
   Moon,
-  Monitor
+  Monitor,
+  Globe
 } from 'lucide-react';
 import { authApi } from '../../services/authApi';
 
 export const SettingsView = ({ onBackToDashboard }) => {
-  const { user, token, updateUserProfile, changeUserPassword } = useAuth();
+  const { user, token, updateUserProfile, changeUserPassword, updateUserCurrency } = useAuth();
   const { preference, setTheme, isDark } = useTheme();
+  const { currencyCode, currency, formatAmount, symbol } = useCurrency();
 
   const [activeTab, setActiveTab] = useState('profile'); // 'profile' | 'accounts' | 'security' | 'preferences'
 
@@ -391,7 +394,7 @@ export const SettingsView = ({ onBackToDashboard }) => {
                     <input
                       type="number"
                       step="0.01"
-                      placeholder="Initial Balance ($0.00)"
+                      placeholder={`Initial Balance (${symbol}0.00)`}
                       value={newAccountBalance}
                       onChange={(e) => setNewAccountBalance(e.target.value)}
                       className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-[#30363D] bg-white dark:bg-[#161B22] text-slate-800 dark:text-[#E6EDF3]"
@@ -401,11 +404,9 @@ export const SettingsView = ({ onBackToDashboard }) => {
                       onChange={(e) => setNewAccountCurrency(e.target.value)}
                       className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-[#30363D] bg-white dark:bg-[#161B22] text-slate-800 dark:text-[#E6EDF3] cursor-pointer"
                     >
-                      <option value="USD">USD ($)</option>
-                      <option value="EUR">EUR (€)</option>
-                      <option value="GBP">GBP (£)</option>
-                      <option value="INR">INR (₹)</option>
-                      <option value="CAD">CAD ($)</option>
+                      <option value="INR">INR (₹) - Indian Rupee</option>
+                      <option value="USD">USD ($) - US Dollar</option>
+                      <option value="EUR">EUR (€) - Euro</option>
                     </select>
                   </div>
                   <div className="flex justify-end space-x-2 pt-2">
@@ -446,7 +447,7 @@ export const SettingsView = ({ onBackToDashboard }) => {
                     </div>
                     <div className="text-right">
                       <div className="font-mono font-bold text-xs sm:text-sm text-slate-800 dark:text-[#E6EDF3]">
-                        ${Number(acc.initial_balance || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        {formatAmount(acc.initial_balance || 0)}
                       </div>
                       <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded">
                         Active Sync
@@ -579,6 +580,73 @@ export const SettingsView = ({ onBackToDashboard }) => {
                       </button>
                     );
                   })}
+                </div>
+              </div>
+
+              {/* Currency & Banking Region Control */}
+              <div className="p-4 rounded-xl border border-slate-200 dark:border-[#30363D] bg-slate-50/50 dark:bg-[#0D1117] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-xs sm:text-sm text-[#112E81] dark:text-[#E6EDF3]">Currency & Banking Region</div>
+                    <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                      Select your operational jurisdiction and accounting currency
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-semibold text-[#4382DF] px-2.5 py-0.5 rounded-full bg-[#4382DF]/10 flex items-center gap-1">
+                    <span>{currency.flag}</span>
+                    <span>{currency.code} ({currency.symbol})</span>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  {Object.values(CURRENCIES).map((item) => {
+                    const isSelected = currencyCode === item.code;
+                    return (
+                      <button
+                        key={item.code}
+                        type="button"
+                        onClick={() => {
+                          if (updateUserCurrency) {
+                            updateUserCurrency(item.code, item.location);
+                          }
+                          setStatusMessage({
+                            type: 'success',
+                            text: `Active currency switched to ${item.name} (${item.symbol}). All values and charts updated dynamically.`
+                          });
+                        }}
+                        className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col space-y-2 ${
+                          isSelected
+                            ? 'bg-white dark:bg-[#1C2333] border-[#4382DF] shadow-xs ring-2 ring-[#4382DF]/30'
+                            : 'bg-white dark:bg-[#161B22] border-slate-200 dark:border-[#30363D] text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xl">{item.flag}</span>
+                          <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${isSelected ? 'bg-[#4382DF] text-white' : 'bg-slate-100 dark:bg-[#30363D] text-slate-600 dark:text-slate-400'}`}>
+                            {item.symbol}
+                          </span>
+                        </div>
+                        <div>
+                          <div className={`text-xs font-bold ${isSelected ? 'text-[#112E81] dark:text-[#E6EDF3]' : 'text-slate-700 dark:text-slate-300'}`}>
+                            {item.name}
+                          </div>
+                          <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                            {item.location}
+                          </div>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono pt-1 border-t border-slate-100 dark:border-[#30363D]">
+                          1 USD = {item.rateFromUSD} {item.code}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 flex items-start space-x-2 text-[11px] text-blue-700 dark:text-blue-300">
+                  <Globe className="w-4 h-4 shrink-0 mt-0.5 text-[#4382DF]" />
+                  <span>
+                    <strong>Dynamic Conversion Active:</strong> Changing currency converts all ledger transactions, KPI metrics, predictive cashflow, and budget limits from base rates (USD 1.00 = INR 83.50 = EUR 0.92).
+                  </span>
                 </div>
               </div>
 

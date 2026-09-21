@@ -8,15 +8,22 @@ import { BudgetTierCard } from './BudgetTierCard';
 import { LedgerTable } from './LedgerTable';
 import { HealthScoreCard } from './HealthScoreCard';
 import { SettingsView } from '../settings/SettingsView';
+import { BudgetView } from './BudgetView';
+import { ExpensesView } from '../expenses/ExpensesView';
 
 export const DashboardView = ({
+  token,
+  user,
   metrics,
   transactions = [],
   categories = [],
   budgetProgress = [],
   onOpenQuickAdd,
   onAddTransaction,
+  onUpdateTransaction,
+  onDeleteTransaction,
   onAddBudget,
+  onSaveBudget,
   onUpdateCategory,
   onSyncBankData,
   syncLoading = false
@@ -55,6 +62,28 @@ export const DashboardView = ({
           <main className="flex-1 p-4 sm:p-6 lg:p-8">
             <SettingsView onBackToDashboard={() => setActiveNav('dashboard')} />
           </main>
+        ) : (activeNav === 'expenses' || activeNav === 'ledger') ? (
+          <main className="flex-1 p-4 sm:p-6 lg:p-8">
+            <ExpensesView
+              token={token}
+              categories={categories}
+              accounts={user?.accounts || []}
+              globalTransactions={transactions}
+              onSyncBankData={handleSyncTrigger}
+              onAddTransaction={onAddTransaction}
+              onUpdateTransaction={onUpdateTransaction}
+              onDeleteTransaction={onDeleteTransaction}
+            />
+          </main>
+        ) : activeNav === 'planning' ? (
+          <main className="flex-1 p-4 sm:p-6 lg:p-8">
+            <BudgetView
+              budgetProgress={budgetProgress}
+              transactions={transactions}
+              onAddBudget={onAddBudget}
+              onSaveBudget={onSaveBudget}
+            />
+          </main>
         ) : (
           <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] w-full mx-auto">
 
@@ -82,6 +111,7 @@ export const DashboardView = ({
                   onAddTransaction={onAddTransaction}
                   onUpdateCategory={onUpdateCategory}
                   onSyncTrigger={handleSyncTrigger}
+                  onViewAllExpenses={() => setActiveNav('expenses')}
                 />
               </div>
 
