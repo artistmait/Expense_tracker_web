@@ -1,0 +1,208 @@
+import React, { useState } from 'react';
+import {
+  RefreshCw,
+  ArrowUpDown,
+  Plus,
+  ChevronDown,
+  Tag,
+  Building,
+  Sparkles,
+  Check
+} from 'lucide-react';
+
+export const LedgerTable = ({
+  transactions = [],
+  categories = [],
+  onAddTransaction,
+  onUpdateCategory,
+  onSyncTrigger
+}) => {
+  const [editingTxId, setEditingTxId] = useState(null);
+
+  const defaultCategoriesList = [
+    { id: 'cat-housing',   category_name: 'Housing & Utilities',        cat_colour: '#112E81' },
+    { id: 'cat-food',      category_name: 'Food & Dining',               cat_colour: '#4382DF' },
+    { id: 'cat-tech',      category_name: 'Tech, AI & Subscriptions',    cat_colour: '#8B5CF6' },
+    { id: 'cat-groceries', category_name: 'Groceries',                   cat_colour: '#AACCD6' },
+    { id: 'cat-transport', category_name: 'Transportation & Gas',        cat_colour: '#4647AE' },
+    { id: 'cat-ent',       category_name: 'Entertainment & Leisure',     cat_colour: '#F59E0B' },
+    { id: 'cat-health',    category_name: 'Health & Wellness',           cat_colour: '#10B981' },
+    { id: 'cat-salary',    category_name: 'Salary & Direct Deposit',     cat_colour: '#059669' },
+    { id: 'cat-invest',    category_name: 'Investments & Dividends',     cat_colour: '#2563EB' }
+  ];
+
+  const availableCategories = categories.length > 0 ? categories : defaultCategoriesList;
+
+  const handleCategorySelect = (txId, category) => {
+    if (onUpdateCategory) {
+      onUpdateCategory(txId, category.id || category.category_name, category.category_name);
+    }
+    setEditingTxId(null);
+  };
+
+  const avatarColors = ['bg-[#112E81]', 'bg-[#4382DF]', 'bg-[#4647AE]'];
+
+  return (
+    <div className="glass-card rounded-2xl p-5 sm:p-6 transition-all border border-slate-200/80 dark:border-[#30363D] relative">
+
+      {/* Table Header Row */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+        <div>
+          <div className="flex items-center space-x-2">
+            <h3 className="text-sm sm:text-base font-bold text-[#112E81] dark:text-[#E6EDF3] tracking-tight">
+              Granular Recent Ledger / Transactions
+            </h3>
+            <span className="text-[10px] font-semibold text-[#4382DF] bg-[#AACCD6]/25 dark:bg-[#4382DF]/10 px-2 py-0.5 rounded-full border border-[#4382DF]/20 flex items-center gap-1">
+              <Sparkles className="w-2.5 h-2.5" />
+              Categorization Enabled
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+            Real-time feeds synced from Mock Bank API • Click any category pill to rearrange manually
+          </p>
+        </div>
+
+        <div className="flex items-center space-x-2">
+          {onSyncTrigger && (
+            <button
+              onClick={onSyncTrigger}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#4382DF] hover:bg-[#112E81] text-white text-xs font-semibold shadow-2xs transition-all cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sync Feed</span>
+            </button>
+          )}
+          <button
+            onClick={onAddTransaction}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-[#1C2333] hover:bg-[#AACCD6]/30 dark:hover:bg-[#252D40] text-xs font-semibold text-[#112E81] dark:text-[#E6EDF3] transition-all cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5 text-[#4382DF]" />
+            <span>New Entry</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto min-h-[220px]">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="border-b border-slate-100 dark:border-[#30363D] text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              <th className="pb-3 font-semibold">
+                <span className="inline-flex items-center gap-1">Merchant / Source <ArrowUpDown className="w-3 h-3 text-slate-300 dark:text-slate-600" /></span>
+              </th>
+              <th className="pb-3 font-semibold">
+                <span className="inline-flex items-center gap-1">Category (Editable) <ArrowUpDown className="w-3 h-3 text-slate-300 dark:text-slate-600" /></span>
+              </th>
+              <th className="pb-3 font-semibold">
+                <span className="inline-flex items-center gap-1">Payment Method / Feed <ArrowUpDown className="w-3 h-3 text-slate-300 dark:text-slate-600" /></span>
+              </th>
+              <th className="pb-3 font-semibold">Bill Status</th>
+              <th className="pb-3 font-semibold text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-[#30363D] text-xs">
+            {transactions.map((item, idx) => {
+              const isExpense = Number(item.amount) < 0 || item.transaction_type === 'expense';
+              const displayAmount = Math.abs(Number(item.amount || 0));
+              const merchantName = item.merchant || item.title || item.t_desc || 'Transaction';
+              const firstLetter = merchantName.charAt(0).toUpperCase();
+
+              return (
+                <tr key={item.id || idx} className="hover:bg-slate-50/70 dark:hover:bg-[#1C2333]/60 transition-colors group">
+
+                  {/* Merchant */}
+                  <td className="py-3.5 pr-4">
+                    <div className="flex items-center space-x-2.5">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs text-white ${avatarColors[idx % 3]}`}>
+                        {firstLetter}
+                      </div>
+                      <div>
+                        <span className="font-semibold text-slate-800 dark:text-[#E6EDF3] whitespace-nowrap block">
+                          {merchantName}
+                        </span>
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500 block font-mono">
+                          {item.t_date || item.date || 'Today'}
+                        </span>
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Category Pill */}
+                  <td className="py-3.5 pr-4 relative">
+                    <div className="relative inline-block">
+                      <button
+                        onClick={() => setEditingTxId(editingTxId === (item.id || idx) ? null : (item.id || idx))}
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#AACCD6]/25 dark:bg-[#4382DF]/10 hover:bg-[#AACCD6]/50 dark:hover:bg-[#4382DF]/20 text-[#112E81] dark:text-[#AACCD6] border border-[#AACCD6]/60 dark:border-[#4382DF]/30 transition-all cursor-pointer group-hover:border-[#4382DF]"
+                      >
+                        <Tag className="w-2.5 h-2.5 text-[#4382DF]" />
+                        <span>{item.category_name || item.category || 'General'}</span>
+                        <ChevronDown className="w-3 h-3 text-slate-400 dark:text-slate-500" />
+                      </button>
+
+                      {/* Category Dropdown */}
+                      {editingTxId === (item.id || idx) && (
+                        <div className="absolute left-0 top-full mt-1 w-56 bg-white dark:bg-[#1C2333] rounded-xl shadow-xl border border-slate-200 dark:border-[#30363D] py-1.5 z-50 animate-fadeIn">
+                          <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-slate-100 dark:border-[#30363D]">
+                            Reassign Category
+                          </div>
+                          <div className="max-h-48 overflow-y-auto">
+                            {availableCategories.map((cat) => (
+                              <button
+                                key={cat.id || cat.category_name}
+                                onClick={() => handleCategorySelect(item.id, cat)}
+                                className="w-full text-left px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-[#AACCD6]/20 dark:hover:bg-[#4382DF]/10 hover:text-[#112E81] dark:hover:text-[#E6EDF3] flex items-center justify-between cursor-pointer"
+                              >
+                                <span className="flex items-center space-x-2">
+                                  <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: cat.cat_colour || '#4382DF' }} />
+                                  <span>{cat.category_name}</span>
+                                </span>
+                                {(item.category_name || item.category) === cat.category_name && (
+                                  <Check className="w-3.5 h-3.5 text-[#4382DF]" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* Payment Method */}
+                  <td className="py-3.5 pr-4 text-slate-500 dark:text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                    <span className="flex items-center gap-1.5">
+                      <Building className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                      <span>{item.account_name || item.paymentMethod || item.account || 'Chase Sapphire •••• 8492'}</span>
+                    </span>
+                  </td>
+
+                  {/* Recurring Status */}
+                  <td className="py-3.5 pr-4">
+                    <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#1C2333] text-slate-600 dark:text-slate-400 text-[11px] font-medium border border-transparent dark:border-[#30363D]">
+                      <RefreshCw className="w-2.5 h-2.5 text-[#4382DF]" />
+                      <span>{item.is_reccuring || item.status === 'Recurring' ? 'Recurring' : 'Settled'}</span>
+                    </span>
+                  </td>
+
+                  {/* Amount */}
+                  <td className="py-3.5 text-right font-mono font-bold whitespace-nowrap">
+                    {isExpense ? (
+                      <span className="text-slate-800 dark:text-[#E6EDF3]">
+                        -${displayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </span>
+                    ) : (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                        +${displayAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </span>
+                    )}
+                  </td>
+
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  );
+};
