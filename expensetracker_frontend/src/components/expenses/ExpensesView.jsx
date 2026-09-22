@@ -21,18 +21,7 @@ import { transactionsApi } from '../../services/transactionsApi';
 import { useToast } from '../../context/ToastContext';
 import { ExpenseFilters } from './ExpenseFilters';
 import { ExpenseModal } from './ExpenseModal';
-
-const DEFAULT_CATEGORIES = [
-  { id: 'cat-housing',   category_name: 'Housing & Utilities',       cat_colour: '#112E81' },
-  { id: 'cat-food',      category_name: 'Food & Dining',              cat_colour: '#4382DF' },
-  { id: 'cat-tech',      category_name: 'Tech, AI & Subscriptions',   cat_colour: '#8B5CF6' },
-  { id: 'cat-groceries', category_name: 'Groceries',                  cat_colour: '#AACCD6' },
-  { id: 'cat-transport', category_name: 'Transportation & Gas',       cat_colour: '#4647AE' },
-  { id: 'cat-ent',       category_name: 'Entertainment & Leisure',    cat_colour: '#F59E0B' },
-  { id: 'cat-health',    category_name: 'Health & Wellness',          cat_colour: '#10B981' },
-  { id: 'cat-salary',    category_name: 'Salary & Direct Deposit',    cat_colour: '#059669' },
-  { id: 'cat-invest',    category_name: 'Investments & Dividends',    cat_colour: '#2563EB' },
-];
+import { DEFAULT_CATEGORIES } from '../../data/defaultCategories';
 
 const DEFAULT_ACCOUNTS = [
   { id: 'acc-chk', account_name: 'Main Checking Account' },
@@ -71,7 +60,7 @@ export const ExpensesView = ({
   const { toast } = useToast();
 
   const isRealToken = token && token !== 'mock_jwt_token' && token !== 'mock_jwt_demo_token';
-  const categories = propCategories.length > 0 ? propCategories : DEFAULT_CATEGORIES;
+  const categories = propCategories.length > 0 ? propCategories : (isRealToken ? [] : DEFAULT_CATEGORIES);
   const accounts   = propAccounts.length   > 0 ? propAccounts   : DEFAULT_ACCOUNTS;
 
   const [filters, setFilters]           = useState(parseFiltersFromUrl);

@@ -11,6 +11,7 @@ import { QuickAddModal } from './components/home/QuickAddModal';
 import { SetBudgetModal } from './components/dashboard/SetBudgetModal';
 import { transactionsApi } from './services/transactionsApi';
 import { budgetsApi } from './services/budgetsApi';
+import { DEFAULT_CATEGORIES, DEFAULT_EXPENSE_CATEGORIES } from './data/defaultCategories';
 
 function MainAppContent() {
   const { isAuthenticated, token, user } = useAuth();
@@ -59,6 +60,12 @@ function MainAppContent() {
   const [budgetSpendMap, setBudgetSpendMap] = useState({});
 
   const isRealToken = token && token !== 'mock_jwt_token' && token !== 'mock_jwt_demo_token';
+  const dashboardCategories = categories.length > 0
+    ? categories
+    : (isRealToken ? [] : DEFAULT_CATEGORIES);
+  const budgetCategories = categories.length > 0
+    ? categories.filter((category) => category.category_type !== 'income')
+    : (isRealToken ? [] : DEFAULT_EXPENSE_CATEGORIES);
 
   // Cache transactions to localStorage when updated
   useEffect(() => {
@@ -455,7 +462,7 @@ function MainAppContent() {
           user={user}
           metrics={metrics}
           transactions={transactions}
-          categories={categories}
+          categories={dashboardCategories}
           budgetProgress={budgetProgress}
           onOpenQuickAdd={() => handleOpenQuickAdd('expense')}
           onAddTransaction={handleSaveEntry}
@@ -478,13 +485,13 @@ function MainAppContent() {
         initialType={quickAddType}
         onSave={handleSaveEntry}
         accounts={user?.accounts || []}
-        categories={categories}
+        categories={dashboardCategories}
       />
 
       <SetBudgetModal
         isOpen={isBudgetModalOpen}
         onClose={() => setIsBudgetModalOpen(false)}
-        categories={categories}
+        categories={budgetCategories}
         budgets={budgetProgress}
         currentSpendMap={budgetSpendMap}
         onSaveBudget={handleSaveBudget}

@@ -12,6 +12,7 @@ import {
   Receipt
 } from 'lucide-react';
 import { useCurrency } from '../../context/CurrencyContext';
+import { DEFAULT_CATEGORIES } from '../../data/defaultCategories';
 
 export const LedgerTable = ({
   transactions = [],
@@ -24,19 +25,7 @@ export const LedgerTable = ({
   const [editingTxId, setEditingTxId] = useState(null);
   const { formatAmount } = useCurrency();
 
-  const defaultCategoriesList = [
-    { id: 'cat-housing',   category_name: 'Housing & Utilities',        cat_colour: '#112E81' },
-    { id: 'cat-food',      category_name: 'Food & Dining',               cat_colour: '#4382DF' },
-    { id: 'cat-tech',      category_name: 'Tech, AI & Subscriptions',    cat_colour: '#8B5CF6' },
-    { id: 'cat-groceries', category_name: 'Groceries',                   cat_colour: '#AACCD6' },
-    { id: 'cat-transport', category_name: 'Transportation & Gas',        cat_colour: '#4647AE' },
-    { id: 'cat-ent',       category_name: 'Entertainment & Leisure',     cat_colour: '#F59E0B' },
-    { id: 'cat-health',    category_name: 'Health & Wellness',           cat_colour: '#10B981' },
-    { id: 'cat-salary',    category_name: 'Salary & Direct Deposit',     cat_colour: '#059669' },
-    { id: 'cat-invest',    category_name: 'Investments & Dividends',     cat_colour: '#2563EB' }
-  ];
-
-  const availableCategories = categories.length > 0 ? categories : defaultCategoriesList;
+  const availableCategories = categories.length > 0 ? categories : DEFAULT_CATEGORIES;
 
   const handleCategorySelect = (txId, category) => {
     if (onUpdateCategory) {

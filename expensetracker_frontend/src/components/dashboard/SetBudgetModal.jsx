@@ -121,6 +121,7 @@ export const SetBudgetModal = ({
               onChange={(e) => handleCategoryChange(e.target.value)}
               className="w-full px-3 py-2.5 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-[#30363D] bg-slate-50/70 dark:bg-[#0D1117] text-slate-800 dark:text-[#E6EDF3] focus:outline-none focus:border-[#4382DF] focus:ring-2 focus:ring-[#AACCD6]/50 dark:focus:ring-[#4382DF]/30 transition-all cursor-pointer font-medium"
             >
+              {categories.length === 0 && <option value="">No categories available</option>}
               {categories.map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.category_name}
