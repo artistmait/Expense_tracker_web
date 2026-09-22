@@ -1,39 +1,84 @@
 import { useState } from 'react';
 import { X, Check, DollarSign, Shield } from 'lucide-react';
 import { Button } from '../common/Button';
+import { useCurrency } from '../../context/CurrencyContext';
 
-export function QuickAddModal({ isOpen, onClose, initialType = 'expense', onSave }) {
-  const [activeType, setActiveType] = useState(initialType);
-  const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState('');
-  const [category, setCategory] = useState('Tech & Services');
-  const [account, setAccount] = useState('Main Checking ••8492');
-  const [shares, setShares] = useState('');
-  const [ticker, setTicker] = useState('NVDA');
-  const [isSuccess, setIsSuccess] = useState(false);
-
+// FIX #9 + #10 (audit): the old QuickAddModal hardcoded fake accounts
+// ("Main Checking ••8492") and category names, sent display strings where the
+// backend expects UUIDs, and emitted amounts in the display currency that were
+// persisted raw. It now receives the user's REAL accounts and categories as
+// props, sends account_id UUIDs (or nothing → backend resolves the default),
+// keeps amounts in the display currency (App.jsx converts to USD base), and
+// reports honest in-flight state instead of a fake "Saved Securely!" delay.
+//
+// FIX (lint): form state initializes on mount; the keyed <QuickAddForm/> is
+// remounted whenever the modal opens instead of resetting state in an effect.
+export function QuickAddModal({ isOpen, onClose, initialType = 'expense', onSave, accounts = [], categories = [] }) {
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  // Keying on isOpen remounts the form each time the modal opens, so all
+  // input state initializes fresh without setState-in-effect patterns.
+  return (
+    <QuickAddForm
+      key={String(isOpen)}
+      onClose={onClose}
+      initialType={initialType}
+      onSave={onSave}
+      accounts={accounts}
+      categories={categories}
+    />
+  );
+}
+
+function QuickAddForm({ onClose, initialType, onSave, accounts, categories }) {
+  const [activeType, setActiveType] = useState(initialType === 'income' ? 'income' : 'expense');
+  const [title, setTitle] = useState('');
+  const [amount, setAmount] = useState('');
+  const [categoryId, setCategoryId] = useState(categories[0]?.id || '');
+  const [accountId, setAccountId] = useState(accounts[0]?.id || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const { symbol } = useCurrency();
+
+  const type = activeType === 'income' ? 'income' : 'expense';
+  const selectedCategory = categories.find((c) => c.id === categoryId);
+  const selectedAccount = accounts.find((a) => a.id === accountId);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSuccess(true);
-    setTimeout(() => {
+    setError('');
+
+    if (!title.trim()) {
+      setError('Please enter a description.');
+      return;
+    }
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      setError('Please enter a valid amount greater than 0.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
       if (onSave) {
-        onSave({
-          type: activeType,
-          title: activeType === 'stock' ? `${ticker} Position` : title,
-          amount: parseFloat(amount) || 0,
-          category,
-          account,
-          date: 'Just now'
+        await onSave({
+          type,
+          transaction_type: type,
+          title: title.trim(),
+          t_desc: title.trim(),
+          amount: numAmount, // display currency — converted in App.jsx
+          category_id: categoryId || null,
+          category_name: selectedCategory?.category_name || 'General',
+          account_id: accountId || null,
+          account_name: selectedAccount?.account_name || null,
         });
       }
-      setIsSuccess(false);
       onClose();
-      setTitle('');
-      setAmount('');
-      setShares('');
-    }, 800);
+    } catch (err) {
+      setError(err.message || 'Failed to save. Nothing was recorded.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   /* Shared input class — dark aware */
@@ -53,7 +98,7 @@ export function QuickAddModal({ isOpen, onClose, initialType = 'expense', onSave
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-[#E6EDF3]">Record Financial Activity</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Encrypted instant ledger entry</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Add a transaction to your ledger</p>
             </div>
           </div>
           <button
@@ -69,9 +114,7 @@ export function QuickAddModal({ isOpen, onClose, initialType = 'expense', onSave
           <div className="flex bg-slate-100 dark:bg-[#1C2333] p-1 rounded-2xl gap-1">
             {[
               { id: 'expense', label: 'Log Expense' },
-              { id: 'income', label: 'Add Income' },
-              { id: 'stock', label: 'Buy Stock' },
-              { id: 'budget', label: 'New Budget' }
+              { id: 'income', label: 'Add Income' }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -91,90 +134,68 @@ export function QuickAddModal({ isOpen, onClose, initialType = 'expense', onSave
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {activeType === 'stock' ? (
-            <>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Ticker Symbol</label>
-                <input
-                  type="text"
-                  required
-                  value={ticker}
-                  onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                  placeholder="e.g. NVDA, AAPL, VOO"
-                  className={inputCls}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Number of Shares</label>
-                  <input type="number" step="any" required value={shares} onChange={(e) => setShares(e.target.value)} placeholder="10" className={inputCls} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Price per Share ($)</label>
-                  <input type="number" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="145.00" className={inputCls} />
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  {activeType === 'income' ? 'Income Description / Source' : activeType === 'budget' ? 'Budget Category Name' : 'Merchant or Payee'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder={activeType === 'income' ? 'e.g. Freelance Consulting' : activeType === 'budget' ? 'e.g. Subscriptions & Tools' : 'e.g. Apple Store, Whole Foods'}
-                  className={inputCls}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    {activeType === 'budget' ? 'Monthly Limit ($)' : 'Amount ($)'}
-                  </label>
-                  <input type="number" step="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className={inputCls} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Category</label>
-                  <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
-                    <option value="Tech & Services">Tech & Subscriptions</option>
-                    <option value="Food & Dining">Food & Dining</option>
-                    <option value="Housing & Utilities">Housing & Utilities</option>
-                    <option value="Travel & Lifestyle">Travel & Lifestyle</option>
-                    <option value="Health & Fitness">Health & Fitness</option>
-                    <option value="Income / Salary">Income / Salary</option>
-                    <option value="Investments">Investments</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Account</label>
-                <select value={account} onChange={(e) => setAccount(e.target.value)} className={inputCls}>
-                  <option value="Main Checking ••8492">Main Checking ••8492</option>
-                  <option value="Sapphire Reserve ••3124">Sapphire Reserve ••3124</option>
-                  <option value="Primary Vault">Primary Vault</option>
-                  <option value="Trading Account">Trading Account</option>
-                </select>
-              </div>
-            </>
+          {error && (
+            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-rose-300 text-xs font-medium">
+              {error}
+            </div>
           )}
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              {type === 'income' ? 'Income Description / Source' : 'Merchant or Payee'} *
+            </label>
+            <input
+              type="text"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={type === 'income' ? 'e.g. Freelance Consulting' : 'e.g. Apple Store, Whole Foods'}
+              className={inputCls}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Amount ({symbol}) *
+              </label>
+              <input type="number" step="0.01" min="0.01" required value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Category</label>
+              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={`${inputCls} cursor-pointer`}>
+                {categories.length === 0 && <option value="">No categories loaded</option>}
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.category_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Account</label>
+            <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={`${inputCls} cursor-pointer`}>
+              {accounts.length === 0 && <option value="">Default account (resolved on save)</option>}
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.account_name}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Footer Actions */}
           <div className="pt-3 flex items-center justify-between border-t border-slate-100 dark:border-[#30363D]">
             <div className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500 font-medium">
               <Shield className="w-3.5 h-3.5 text-[#1591DC]" />
-              <span>256-Bit Encrypted</span>
+              <span>Saved to your ledger</span>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-              <Button variant="gradient" size="sm" type="submit" icon={isSuccess ? Check : undefined}>
-                {isSuccess ? 'Saved Securely!' : 'Save Entry'}
+              <Button variant="gradient" size="sm" type="submit" disabled={isSubmitting} icon={isSubmitting ? undefined : Check}>
+                {isSubmitting ? 'Saving...' : 'Save Entry'}
               </Button>
             </div>
           </div>

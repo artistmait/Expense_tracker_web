@@ -198,18 +198,44 @@ export const createTransaction = async (req, res) => {
       t_date
     } = req.body;
 
-    if (!amount || isNaN(Number(amount))) {
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
       return res.status(400).json({ success: false, message: 'Valid amount is required.' });
+    }
+    if (Number(amount) > 10000000000) {
+      return res.status(400).json({ success: false, message: 'Amount exceeds the maximum allowed value.' });
     }
 
     if (!t_desc || t_desc.trim().length === 0) {
       return res.status(400).json({ success: false, message: 'Description is required.' });
     }
 
-    // Default account resolution if not supplied
-    let targetAccountId = account_id;
+    // FIX #9 (audit): validate transaction_type and date format server-side.
+    const VALID_TYPES = new Set(['expense', 'income', 'transfer']);
+    const txType = (transaction_type || 'expense').toLowerCase();
+    if (!VALID_TYPES.has(txType)) {
+      return res.status(400).json({ success: false, message: 'transaction_type must be expense, income or transfer.' });
+    }
+    const dateVal = t_date || new Date().toISOString().split('T')[0];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateVal) || isNaN(Date.parse(dateVal))) {
+      return res.status(400).json({ success: false, message: 't_date must be a valid date in YYYY-MM-DD format.' });
+    }
+
+    // FIX #9 (audit): ownership validation. The client may send display strings
+    // or other users' ids as account_id/category_id — both are now rejected or
+    // resolved server-side instead of being trusted and hitting Postgres casts.
+    let targetAccountId = null;
+    if (account_id) {
+      if (!/^\d{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(account_id)) {
+        return res.status(400).json({ success: false, message: 'account_id must be a valid UUID.' });
+      }
+      const ownedAcc = await query('SELECT id FROM accounts WHERE id = $1 AND user_id = $2', [account_id, userId]);
+      if (ownedAcc.rows.length === 0) {
+        return res.status(403).json({ success: false, message: 'Selected account does not exist or is not yours.' });
+      }
+      targetAccountId = account_id;
+    }
     if (!targetAccountId) {
-      const accRes = await query('SELECT id FROM accounts WHERE user_id = $1 LIMIT 1', [userId]);
+      const accRes = await query('SELECT id FROM accounts WHERE user_id = $1 ORDER BY created_at ASC LIMIT 1', [userId]);
       if (accRes.rows.length > 0) {
         targetAccountId = accRes.rows[0].id;
       } else {
@@ -222,9 +248,22 @@ export const createTransaction = async (req, res) => {
       }
     }
 
+    let targetCategoryId = null;
+    if (category_id) {
+      if (!/^\d{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(category_id)) {
+        return res.status(400).json({ success: false, message: 'category_id must be a valid UUID.' });
+      }
+      const ownedCat = await query(
+        'SELECT id FROM categories WHERE id = $1 AND (is_system = true OR user_id = $2)',
+        [category_id, userId]
+      );
+      if (ownedCat.rows.length === 0) {
+        return res.status(403).json({ success: false, message: 'Selected category does not exist or is not yours.' });
+      }
+      targetCategoryId = category_id;
+    }
+
     const numAmount = Math.abs(parseFloat(amount));
-    const txType = (transaction_type || 'expense').toLowerCase();
-    const dateVal = t_date || new Date().toISOString().split('T')[0];
 
     const insertSql = `
       INSERT INTO transactions (user_id, account_id, category_id, amount, transaction_type, t_desc, is_reccuring, t_date)
@@ -234,7 +273,7 @@ export const createTransaction = async (req, res) => {
     const result = await query(insertSql, [
       userId,
       targetAccountId,
-      category_id || null,
+      targetCategoryId,
       numAmount,
       txType,
       t_desc.trim(),
@@ -416,6 +455,17 @@ export const syncTransactions = async (req, res) => {
   try {
     const userId = req.user.id;
     const syncResult = await syncBankFeedForUser(userId);
+
+    // FIX #8 (audit): be honest when the upstream bank feed is unavailable
+    // instead of reporting a completed sync.
+    if (syncResult.success === false) {
+      return res.status(200).json({
+        success: false,
+        message: syncResult.message || 'Bank feed unavailable. No transactions were imported.',
+        syncStats: syncResult,
+        transactions: []
+      });
+    }
 
     // Fetch refreshed transaction list
     const refreshed = await query(

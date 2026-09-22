@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
-  Plus,
   Save,
   Calendar,
   Building,
@@ -22,7 +21,7 @@ export const ExpenseModal = ({
   accounts = [],
   editTransaction = null, // if provided, modal operates in Edit Mode
 }) => {
-  const { symbol, formatRaw, convertFromUSD } = useCurrency();
+  const { symbol, convertFromUSD } = useCurrency();
   const isEditing = Boolean(editTransaction);
 
   const [title, setTitle] = useState('');
@@ -76,9 +75,9 @@ export const ExpenseModal = ({
       return;
     }
 
-    // Convert amount from active currency back to USD base for consistent backend storage
-    const usdAmount = numAmt / convertFromUSD(1);
-
+    // FIX #10 (audit): pass the DISPLAY-currency amount through unchanged.
+    // App.jsx is the single conversion funnel (display → USD base) for every
+    // entry source, so converting here too would double-convert.
     setSubmitting(true);
     try {
       const selectedCategory = categories.find(c => c.id === categoryId);
@@ -88,7 +87,7 @@ export const ExpenseModal = ({
         id: editTransaction?.id,
         title: title.trim(),
         t_desc: title.trim(),
-        amount: usdAmount,
+        amount: numAmt,
         transaction_type: type,
         category_id: categoryId || null,
         category_name: selectedCategory?.category_name || 'General',

@@ -1,3 +1,4 @@
 /node_modules
 .env
+# .env.example is intentionally tracked; only the real .env is ignored.
 .env.example

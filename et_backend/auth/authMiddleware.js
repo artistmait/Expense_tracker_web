@@ -1,5 +1,15 @@
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { query } from '../config/db.js';
+
+// SECURITY (audit fix #2): single source of truth for the JWT secret.
+// No hardcoded fallback — see authController.js for the same policy.
+const JWT_SECRET = process.env.JWT_SECRET
+  || (process.env.NODE_ENV === 'production' ? null : crypto.randomBytes(32).toString('hex'));
+if (!JWT_SECRET) {
+  console.error('[Config] FATAL: JWT_SECRET is required when NODE_ENV=production.');
+  process.exit(1);
+}
 
 export const verifyToken = async (req, res, next) => {
   try {
@@ -12,9 +22,8 @@ export const verifyToken = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const secret = process.env.JWT_SECRET || 'budgetmate_super_secure_jwt_secret_key_2026_x89a';
 
-    const decoded = jwt.verify(token, secret);
+    const decoded = jwt.verify(token, JWT_SECRET);
 
     // Verify user still exists in database and is active
     const userResult = await query(

@@ -5,13 +5,20 @@ dotenv.config();
 
 const { Pool } = pg;
 
+// SECURITY (audit fix #3): never hardcode credentials. In production a missing
+// DB_PASSWORD must fail loudly instead of silently falling back to a secret in git.
+if (process.env.NODE_ENV === 'production' && !process.env.DB_PASSWORD) {
+  console.error('[Config] FATAL: DB_PASSWORD is required when NODE_ENV=production.');
+  process.exit(1);
+}
+
 // PostgreSQL Connection Pool
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT, 10) || 5432,
   database: process.env.DB_NAME || 'expense_tracker',
   user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'Mmp234456',
+  password: process.env.DB_PASSWORD || undefined,
   max: 20, // Max concurrent connections
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
@@ -59,4 +66,5 @@ export const checkDbConnection = async () => {
   }
 };
 
+export { pool };
 export default pool;

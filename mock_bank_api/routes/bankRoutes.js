@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { MOCK_INSTITUTIONS } from '../data/institutions.js';
 import { MOCK_BANK_TRANSACTIONS } from '../data/mockBankTransactions.js';
+import { getPersonaFeed } from '../data/personaFeeds.js';
 
 const router = Router();
 
@@ -69,6 +70,19 @@ router.get('/accounts', (req, res) => {
 // -------------------------------------------------------------
 router.get('/transactions', (req, res) => {
   const { account_id, type, limit, search } = req.query;
+
+  // Demo personas get a scoped feed consistent with their seeded story
+  // (the et_backend sync forwards the account email in x-demo-user).
+  const personaFeed = getPersonaFeed(req.headers['x-demo-user']);
+  if (personaFeed) {
+    return res.json({
+      success: true,
+      total: personaFeed.length,
+      feed_timestamp: new Date().toISOString(),
+      protocol: "OpenBanking-v2.1",
+      transactions: personaFeed
+    });
+  }
 
   let filtered = [...liveBankTransactions];
 

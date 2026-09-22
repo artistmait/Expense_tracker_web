@@ -1,14 +1,32 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { query } from '../config/db.js';
 import { validateRegistration, validateLogin, validateProfileUpdate } from './authValidation.js';
 import { syncBankFeedForUser } from '../services/bankSyncService.js';
 
+// SECURITY (audit fix #2): a missing JWT_SECRET must be fatal in production.
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  console.error('[Config] FATAL: JWT_SECRET is required when NODE_ENV=production.');
+  process.exit(1);
+}
+
+// SECURITY (audit fix #2): never fall back to a committed secret.
+// In non-production a per-boot random secret invalidates old tokens instead of
+// letting anyone with repo access forge tokens for every user.
+const JWT_SECRET = process.env.JWT_SECRET
+  || (process.env.NODE_ENV === 'production'
+    ? null
+    : crypto.randomBytes(32).toString('hex'));
+if (!JWT_SECRET) {
+  console.error('[Config] FATAL: JWT_SECRET is required when NODE_ENV=production.');
+  process.exit(1);
+}
+
 // JWT generator helper
 const generateToken = (userId, email) => {
-  const secret = process.env.JWT_SECRET || 'budgetmate_super_secure_jwt_secret_key_2026_x89a';
   const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
-  return jwt.sign({ userId, email }, secret, { expiresIn });
+  return jwt.sign({ userId, email }, JWT_SECRET, { expiresIn });
 };
 
 // -------------------------------------------------------------

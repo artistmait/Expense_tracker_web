@@ -10,6 +10,7 @@ import { HealthScoreCard } from './HealthScoreCard';
 import { SettingsView } from '../settings/SettingsView';
 import { BudgetView } from './BudgetView';
 import { ExpensesView } from '../expenses/ExpensesView';
+import { AdvisorPanel } from '../advisor/AdvisorPanel';
 
 export const DashboardView = ({
   token,
@@ -29,6 +30,7 @@ export const DashboardView = ({
   syncLoading = false
 }) => {
   const [activeNav, setActiveNav] = useState('dashboard');
+  const [isAdvisorOpen, setIsAdvisorOpen] = useState(false);
   const { toast } = useToast();
 
   const handleSyncTrigger = async () => {
@@ -55,7 +57,10 @@ export const DashboardView = ({
           onOpenQuickAdd={onOpenQuickAdd}
           onSyncTrigger={handleSyncTrigger}
           onOpenSettings={() => setActiveNav('settings')}
+          onOpenAdvisor={() => setIsAdvisorOpen(true)}
         />
+
+        <AdvisorPanel token={token} isOpen={isAdvisorOpen} onClose={() => setIsAdvisorOpen(false)} />
 
         {/* Main Body */}
         {activeNav === 'settings' ? (
@@ -116,7 +121,7 @@ export const DashboardView = ({
               </div>
 
               <div className="lg:col-span-4">
-                <HealthScoreCard />
+                <HealthScoreCard metrics={metrics} transactions={transactions} />
               </div>
 
             </div>

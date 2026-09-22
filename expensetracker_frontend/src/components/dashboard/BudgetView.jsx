@@ -108,7 +108,7 @@ export const BudgetView = ({
   // Monthly budget (manual, stored in USD)
   const [isEditingBudget, setIsEditingBudget] = useState(false);
   const [monthlyBudgetInput, setMonthlyBudgetInput] = useState('');
-  const [monthlyBudget, setMonthlyBudget] = useState(7000); // USD base
+  const [monthlyBudget, setMonthlyBudget] = useState(0); // USD base; populated only by user input
 
   const handleSaveBudget = () => {
     const val = parseFloat(monthlyBudgetInput);
@@ -128,48 +128,38 @@ export const BudgetView = ({
       .reduce((sum, t) => sum + Math.abs(Number(t.amount || 0)), 0);
   }, [transactions]);
 
-  // Use dummy data for history (merge last month with live data if available)
+  // Historical chart data is intentionally illustrative; live totals below never
+  // fall back to it.
   const budgetHistory = useMemo(() => {
     const hist = [...DUMMY_BUDGET_HISTORY];
     // Update last entry with live expenses
     hist[hist.length - 1] = {
       ...hist[hist.length - 1],
       budget: monthlyBudget,
-      actual: currentMonthExpenses > 0 ? currentMonthExpenses : hist[hist.length - 1].actual
+      actual: currentMonthExpenses
     };
     return hist;
   }, [monthlyBudget, currentMonthExpenses]);
 
   // Analytics
-  const avgBudget = useMemo(() => budgetHistory.reduce((s, d) => s + d.budget, 0) / budgetHistory.length, [budgetHistory]);
-  const avgActual = useMemo(() => budgetHistory.reduce((s, d) => s + d.actual, 0) / budgetHistory.length, [budgetHistory]);
-  const bestMonth = useMemo(() => [...budgetHistory].sort((a, b) => a.actual - b.actual)[0], [budgetHistory]);
-  const worstMonth = useMemo(() => [...budgetHistory].sort((a, b) => b.actual - a.actual)[0], [budgetHistory]);
-  const savingsEfficiency = useMemo(() => {
-    const savedMonths = budgetHistory.filter(d => d.actual <= d.budget).length;
-    return Math.round((savedMonths / budgetHistory.length) * 100);
-  }, [budgetHistory]);
+  const avgBudget = monthlyBudget;
+  const avgActual = currentMonthExpenses;
+  const bestMonth = null;
+  const worstMonth = null;
+  const savingsEfficiency = monthlyBudget > 0
+    ? (currentMonthExpenses <= monthlyBudget ? 100 : 0)
+    : 0;
 
   // Current month spend vs budget
-  const currentSpend = currentMonthExpenses > 0 ? currentMonthExpenses : DUMMY_BUDGET_HISTORY[DUMMY_BUDGET_HISTORY.length - 1].actual;
+  const currentSpend = currentMonthExpenses;
   const spendPct = monthlyBudget > 0 ? Math.round((currentSpend / monthlyBudget) * 100) : 0;
   const isOver = spendPct > 100;
   const isNear = !isOver && spendPct >= 80;
 
-  // Category breakdown for current month
-  const lastMonthCats = DUMMY_BUDGET_HISTORY[DUMMY_BUDGET_HISTORY.length - 1].categories;
-
-  // Merge with budgetProgress from backend
+  // Real category budgets from database / user
   const categoryBudgets = useMemo(() => {
-    if (budgetProgress.length > 0) return budgetProgress;
-    // Use dummy categories
-    return Object.entries(lastMonthCats).map(([name, spent]) => ({
-      id: name.toLowerCase(),
-      category_name: name,
-      allocated_amount: Math.round(spent * 1.25),
-      spent_amount: spent,
-    }));
-  }, [budgetProgress, lastMonthCats]);
+    return budgetProgress || [];
+  }, [budgetProgress]);
 
   const presets = [
     { label: `${symbol}50K`, usd: 50000 / convertFromUSD(1) },
@@ -230,12 +220,12 @@ export const BudgetView = ({
 
           <div className="text-center space-y-1">
             <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Monthly Budget</div>
-            <div className="text-xl font-extrabold text-[#112E81] dark:text-[#E6EDF3] font-mono">{formatAmount(monthlyBudget)}</div>
+            <div className="text-xl font-extrabold text-[#112E81] dark:text-[#E6EDF3] font-mono">{monthlyBudget > 0 ? formatAmount(monthlyBudget) : 'No cap set'}</div>
             <div className="flex items-center justify-center gap-3 text-xs font-mono mt-1">
               <span className="text-rose-500 font-bold">Spent: {formatAmount(currentSpend)}</span>
               <span className="text-slate-300 dark:text-slate-600">|</span>
               <span className={`font-bold ${isOver ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                {isOver ? `Over: ${formatAmount(currentSpend - monthlyBudget)}` : `Left: ${formatAmount(monthlyBudget - currentSpend)}`}
+                {monthlyBudget <= 0 ? 'Set a cap to track progress' : isOver ? `Over: ${formatAmount(currentSpend - monthlyBudget)}` : `Left: ${formatAmount(monthlyBudget - currentSpend)}`}
               </span>
             </div>
           </div>
@@ -331,7 +321,7 @@ export const BudgetView = ({
                 </div>
                 <div>
                   <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Current Monthly Cap</div>
-                  <div className="text-2xl font-extrabold text-[#112E81] dark:text-[#E6EDF3] font-mono">{formatAmount(monthlyBudget)}</div>
+                  <div className="text-2xl font-extrabold text-[#112E81] dark:text-[#E6EDF3] font-mono">{monthlyBudget > 0 ? formatAmount(monthlyBudget) : 'No cap set'}</div>
                 </div>
               </div>
 
@@ -339,7 +329,7 @@ export const BudgetView = ({
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs font-semibold">
                   <span className="text-slate-500 dark:text-slate-400">Monthly Spend Progress</span>
-                  <span className={`${isOver ? 'text-rose-500' : isNear ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400'}`}>{spendPct}%</span>
+                  <span className={`${isOver ? 'text-rose-500' : isNear ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400'}`}>{monthlyBudget > 0 ? `${spendPct}%` : 'Not tracked'}</span>
                 </div>
                 <div className="w-full h-3 bg-slate-100 dark:bg-[#30363D] rounded-full overflow-hidden">
                   <div
@@ -469,76 +459,95 @@ export const BudgetView = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {categoryBudgets.map((b, idx) => {
-            const allocated = b.allocated_amount || 1000;
-            const spent = b.spent_amount || 0;
-            const pct = Math.min(100, Math.round((spent / allocated) * 100));
-            const isOver = spent > allocated;
-            const isNear = !isOver && pct >= 80;
-            const name = b.category_name || 'Category';
-            const color = CATEGORY_COLORS[name] || '#4382DF';
+        {categoryBudgets.length === 0 ? (
+          <div className="p-8 sm:p-12 rounded-2xl border border-dashed border-slate-200 dark:border-[#30363D] bg-white dark:bg-[#161B22] text-center space-y-3">
+            <div className="w-12 h-12 rounded-xl bg-[#4382DF]/10 text-[#4382DF] flex items-center justify-center mx-auto">
+              <PieChart className="w-6 h-6" />
+            </div>
+            <h4 className="text-sm font-bold text-[#112E81] dark:text-[#E6EDF3]">No Category Budgets Configured</h4>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              Set monthly spending targets for specific categories to monitor live spending and trigger over-budget notifications.
+            </p>
+            <button
+              onClick={onAddBudget}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#112E81] hover:bg-[#4647AE] text-white text-xs font-bold shadow-md cursor-pointer transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Category Budget</span>
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {categoryBudgets.map((b, idx) => {
+              const allocated = b.allocated_amount || 1000;
+              const spent = b.spent_amount || 0;
+              const pct = Math.min(100, Math.round((spent / allocated) * 100));
+              const isOver = spent > allocated;
+              const isNear = !isOver && pct >= 80;
+              const name = b.category_name || 'Category';
+              const color = CATEGORY_COLORS[name] || '#4382DF';
 
-            return (
-              <div
-                key={b.id || idx}
-                className={`p-4 rounded-xl border transition-all ${
-                  isOver
-                    ? 'border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/10'
-                    : isNear
-                    ? 'border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/10'
-                    : 'border-slate-200 dark:border-[#30363D] bg-white dark:bg-[#161B22]'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
-                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{name}</span>
+              return (
+                <div
+                  key={b.id || idx}
+                  className={`p-4 rounded-xl border transition-all ${
+                    isOver
+                      ? 'border-rose-200 dark:border-rose-900/50 bg-rose-50/50 dark:bg-rose-950/10'
+                      : isNear
+                      ? 'border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/10'
+                      : 'border-slate-200 dark:border-[#30363D] bg-white dark:bg-[#161B22]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{name}</span>
+                    </div>
+                    {isOver ? (
+                      <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-950/50 px-1.5 py-0.5 rounded">Over</span>
+                    ) : isNear ? (
+                      <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-950/50 px-1.5 py-0.5 rounded">Near</span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded">OK</span>
+                    )}
                   </div>
-                  {isOver ? (
-                    <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-950/50 px-1.5 py-0.5 rounded">Over</span>
-                  ) : isNear ? (
-                    <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-950/50 px-1.5 py-0.5 rounded">Near</span>
-                  ) : (
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded">OK</span>
-                  )}
-                </div>
 
-                <div className="flex items-baseline justify-between mb-2">
-                  <span className="text-base font-extrabold font-mono text-[#112E81] dark:text-[#E6EDF3]">{formatAmount(spent)}</span>
-                  <span className="text-[11px] text-slate-400 font-mono">/ {formatAmount(allocated)}</span>
-                </div>
+                  <div className="flex items-baseline justify-between mb-2">
+                    <span className="text-base font-extrabold font-mono text-[#112E81] dark:text-[#E6EDF3]">{formatAmount(spent)}</span>
+                    <span className="text-[11px] text-slate-400 font-mono">/ {formatAmount(allocated)}</span>
+                  </div>
 
-                <div className="w-full h-2 bg-slate-100 dark:bg-[#30363D] rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      isOver ? 'bg-gradient-to-r from-rose-500 to-red-600'
-                      : isNear ? 'bg-gradient-to-r from-amber-500 to-orange-500'
-                      : 'bg-[#4382DF]'
-                    }`}
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
+                  <div className="w-full h-2 bg-slate-100 dark:bg-[#30363D] rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        isOver ? 'bg-gradient-to-r from-rose-500 to-red-600'
+                        : isNear ? 'bg-gradient-to-r from-amber-500 to-orange-500'
+                        : 'bg-[#4382DF]'
+                      }`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
 
-                <div className="flex items-center justify-between mt-1.5 text-[10px] font-mono">
-                  <span className="text-slate-400">{pct}% used</span>
-                  <span className={`font-bold ${isOver ? 'text-rose-500' : 'text-slate-500 dark:text-slate-400'}`}>
-                    {isOver ? `+${formatAmount(spent - allocated)} over` : `${formatAmount(allocated - spent)} left`}
-                  </span>
+                  <div className="flex items-center justify-between mt-1.5 text-[10px] font-mono">
+                    <span className="text-slate-400">{pct}% used</span>
+                    <span className={`font-bold ${isOver ? 'text-rose-500' : 'text-slate-500 dark:text-slate-400'}`}>
+                      {isOver ? `+${formatAmount(spent - allocated)} over` : `${formatAmount(allocated - spent)} left`}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
 
-          {/* Add Category CTA */}
-          <button
-            onClick={onAddBudget}
-            className="p-4 rounded-xl border-2 border-dashed border-[#AACCD6]/50 dark:border-[#30363D] hover:border-[#4382DF] dark:hover:border-[#4382DF]/60 text-[#4382DF] hover:bg-[#AACCD6]/10 dark:hover:bg-[#1C2333] transition-all cursor-pointer flex flex-col items-center justify-center gap-2 min-h-[120px]"
-          >
-            <Plus className="w-5 h-5" />
-            <span className="text-xs font-bold">Add Category Budget</span>
-          </button>
-        </div>
+            {/* Add Category CTA */}
+            <button
+              onClick={onAddBudget}
+              className="p-4 rounded-xl border-2 border-dashed border-[#AACCD6]/50 dark:border-[#30363D] hover:border-[#4382DF] dark:hover:border-[#4382DF]/60 text-[#4382DF] hover:bg-[#AACCD6]/10 dark:hover:bg-[#1C2333] transition-all cursor-pointer flex flex-col items-center justify-center gap-2 min-h-[120px]"
+            >
+              <Plus className="w-5 h-5" />
+              <span className="text-xs font-bold">Add Category Budget</span>
+            </button>
+          </div>
+        )}
       </div>
 
     </div>

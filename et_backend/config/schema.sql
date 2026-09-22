@@ -1,5 +1,7 @@
 -- ==========================================================
 -- BudgetMate (Expense Tracker) PostgreSQL Database Schema
+-- STRUCTURE ONLY. Seed data lives in seedSystem.sql (always)
+-- and seedDemo.sql (non-production only) — see config/initDb.js
 -- ==========================================================
 
 -- Enable pgcrypto extension for UUID generation
@@ -73,103 +75,6 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 -- ----------------------------------------------------------
--- INDEXES FOR FAST QUERYING
--- ----------------------------------------------------------
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);
-CREATE INDEX IF NOT EXISTS idx_categories_user_id ON categories(user_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_category_id ON transactions(category_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_t_date ON transactions(t_date);
-CREATE INDEX IF NOT EXISTS idx_transactions_user_active_date ON transactions(user_id, t_date DESC) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_transactions_desc_trgm ON transactions USING gin (t_desc gin_trgm_ops);
-CREATE INDEX IF NOT EXISTS idx_transactions_amount ON transactions(amount);
-CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(transaction_type);
-
--- ----------------------------------------------------------
--- SEED DEFAULT SYSTEM CATEGORIES
--- ----------------------------------------------------------
-INSERT INTO categories (category_name, category_type, cat_icon, cat_colour, is_system)
-SELECT * FROM (VALUES
-    ('Housing & Utilities', 'expense', 'Home', '#112E81', true),
-    ('Food & Dining', 'expense', 'Utensils', '#4382DF', true),
-    ('Groceries', 'expense', 'ShoppingBag', '#AACCD6', true),
-    ('Transportation & Gas', 'expense', 'Car', '#4647AE', true),
-    ('Entertainment & Leisure', 'expense', 'Film', '#F59E0B', true),
-    ('Tech, AI & Subscriptions', 'expense', 'Cpu', '#8B5CF6', true),
-    ('Health & Wellness', 'expense', 'Activity', '#10B981', true),
-    ('Salary & Direct Deposit', 'income', 'Briefcase', '#059669', true),
-    ('Investments & Dividends', 'income', 'TrendingUp', '#2563EB', true),
-    ('Freelance & Consulting', 'income', 'Laptop', '#7C3AED', true)
-) AS v(category_name, category_type, cat_icon, cat_colour, is_system)
-WHERE NOT EXISTS (
-    SELECT 1 FROM categories WHERE is_system = true
-);
-
--- ----------------------------------------------------------
--- SEED DEFAULT DEMO USER: alex.morgan@budgetmate.io / password123
--- ----------------------------------------------------------
-INSERT INTO users (username, full_name, email, password_hash, avatar_url, status)
-SELECT 'alexmorgan', 'Alex Morgan', 'alex.morgan@budgetmate.io', '$2b$10$RMU4itoLh.GcDEthpUIwP.VygtXLre8cc71p6KTw55UoWOWNtMG8i', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256', true
-WHERE NOT EXISTS (
-    SELECT 1 FROM users WHERE email = 'alex.morgan@budgetmate.io'
-);
-
--- Seed initial accounts for Demo User
-INSERT INTO accounts (user_id, account_name, account_type, initial_balance, currency, is_active)
-SELECT u.id, 'Chase Sapphire Checking', 'checking', 8420.00, 'USD', true
-FROM users u
-WHERE u.email = 'alex.morgan@budgetmate.io'
-AND NOT EXISTS (
-    SELECT 1 FROM accounts a WHERE a.user_id = u.id AND a.account_name = 'Chase Sapphire Checking'
-);
-
-INSERT INTO accounts (user_id, account_name, account_type, initial_balance, currency, is_active)
-SELECT u.id, 'Amex Reserve Platinum', 'credit_card', 3150.20, 'USD', true
-FROM users u
-WHERE u.email = 'alex.morgan@budgetmate.io'
-AND NOT EXISTS (
-    SELECT 1 FROM accounts a WHERE a.user_id = u.id AND a.account_name = 'Amex Reserve Platinum'
-);
-
-INSERT INTO accounts (user_id, account_name, account_type, initial_balance, currency, is_active)
-SELECT u.id, 'Primary Wealth Vault', 'savings', 45000.00, 'USD', true
-FROM users u
-WHERE u.email = 'alex.morgan@budgetmate.io'
-AND NOT EXISTS (
-    SELECT 1 FROM accounts a WHERE a.user_id = u.id AND a.account_name = 'Primary Wealth Vault'
-);
-
--- ----------------------------------------------------------
--- SEED USER: maitreyee.puranik@budgetmate.io / Maitreyee123@
--- ----------------------------------------------------------
-INSERT INTO users (username, full_name, email, password_hash, avatar_url, status)
-SELECT 'maitreyee', 'Maitreyee Puranik', 'maitreyee.puranik@budgetmate.io', '$2b$10$536TKREprG97CZIKy6f2I.INr7mOgfS64MJV9RQgwvYXb7jr/3r6y', 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=256', true
-WHERE NOT EXISTS (
-    SELECT 1 FROM users WHERE email = 'maitreyee.puranik@budgetmate.io' OR username = 'maitreyee'
-);
-
-INSERT INTO accounts (user_id, account_name, account_type, initial_balance, currency, is_active)
-SELECT u.id, 'Chase Sapphire Checking', 'checking', 8420.00, 'USD', true
-FROM users u
-WHERE u.email = 'maitreyee.puranik@budgetmate.io'
-AND NOT EXISTS (
-    SELECT 1 FROM accounts a WHERE a.user_id = u.id AND a.account_name = 'Chase Sapphire Checking'
-);
-
-INSERT INTO accounts (user_id, account_name, account_type, initial_balance, currency, is_active)
-SELECT u.id, 'Amex Reserve Platinum', 'credit_card', 3150.20, 'USD', true
-FROM users u
-WHERE u.email = 'maitreyee.puranik@budgetmate.io'
-AND NOT EXISTS (
-    SELECT 1 FROM accounts a WHERE a.user_id = u.id AND a.account_name = 'Amex Reserve Platinum'
-);
-
--- ----------------------------------------------------------
 -- 5. BUDGETS TABLE
 -- ----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS budgets (
@@ -198,12 +103,8 @@ CREATE TABLE IF NOT EXISTS monthly_summaries (
     CONSTRAINT unique_user_cat_month UNIQUE(user_id, category_id, month_period)
 );
 
-CREATE INDEX IF NOT EXISTS idx_budgets_user_id ON budgets(user_id);
-CREATE INDEX IF NOT EXISTS idx_budgets_category_id ON budgets(category_id);
-CREATE INDEX IF NOT EXISTS idx_monthly_summaries_user_period ON monthly_summaries(user_id, month_period);
-
 -- ----------------------------------------------------------
--- 7. BUDGET ALERT LOG TABLE (Block 2.1c)
+-- 7. BUDGET ALERT LOG TABLE
 -- Tracks which threshold alerts have already been sent per
 -- user / category / period to prevent duplicate notifications.
 -- rule_code: 'BUDGET_ALERT_80' | 'BUDGET_ALERT_100'
@@ -218,24 +119,55 @@ CREATE TABLE IF NOT EXISTS budget_alert_log (
     CONSTRAINT unique_alert_per_period UNIQUE(user_id, category_id, period, rule_code)
 );
 
-CREATE INDEX IF NOT EXISTS idx_budget_alert_log_user ON budget_alert_log(user_id, period);
+-- ----------------------------------------------------------
+-- 8. RECOMMENDATIONS TABLE (Rule-Based Advisor)
+-- ----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS recommendations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    rule_code VARCHAR(50) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    severity VARCHAR(20) DEFAULT 'info', -- 'info', 'warning', 'critical'
+    category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+    category_name VARCHAR(100),
+    condition_key VARCHAR(255) NOT NULL,
+    metadata JSONB DEFAULT '{}',
+    is_dismissed BOOLEAN DEFAULT false,
+    dismissed_condition_hash VARCHAR(255),
+    dismissed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_user_rule_active UNIQUE(user_id, rule_code)
+);
 
-
+ALTER TABLE recommendations ADD COLUMN IF NOT EXISTS dismissed_condition_hash VARCHAR(255);
 
 -- ----------------------------------------------------------
--- SEED INITIAL BUDGETS FOR DEMO USERS
+-- INDEXES FOR FAST QUERYING
 -- ----------------------------------------------------------
-INSERT INTO budgets (user_id, category_id, amount, period)
-SELECT u.id, c.id, b.amount, 'monthly'
-FROM users u
-CROSS JOIN (VALUES
-    ('Housing & Utilities', 8500.00),
-    ('Groceries', 3000.00),
-    ('Entertainment & Leisure', 3500.00),
-    ('Food & Dining', 1200.00),
-    ('Transportation & Gas', 800.00)
-) AS b(category_name, amount)
-JOIN categories c ON c.category_name = b.category_name AND c.is_system = true
-WHERE (u.email = 'alex.morgan@budgetmate.io' OR u.email = 'maitreyee.puranik@budgetmate.io')
-ON CONFLICT (user_id, category_id, period) DO NOTHING;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);
+CREATE INDEX IF NOT EXISTS idx_categories_user_id ON categories(user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_category_id ON transactions(category_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_t_date ON transactions(t_date);
+CREATE INDEX IF NOT EXISTS idx_transactions_user_active_date ON transactions(user_id, t_date DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_transactions_desc_trgm ON transactions USING gin (t_desc gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_transactions_amount ON transactions(amount);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(transaction_type);
+CREATE INDEX IF NOT EXISTS idx_budgets_user_id ON budgets(user_id);
+CREATE INDEX IF NOT EXISTS idx_budgets_category_id ON budgets(category_id);
+CREATE INDEX IF NOT EXISTS idx_monthly_summaries_user_period ON monthly_summaries(user_id, month_period);
+CREATE INDEX IF NOT EXISTS idx_recommendations_user ON recommendations(user_id) WHERE is_dismissed = false;
+
+-- Bank-sync idempotency (audit fix #8): one natural key per bank feed row.
+-- Lets the sync use a single INSERT ... ON CONFLICT DO NOTHING instead of a
+-- per-row SELECT dup-check. Partial index keeps soft-deleted rows re-insertable.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_bank_sync_tx
+    ON transactions(user_id, account_id, amount, t_date, t_desc)
+    WHERE deleted_at IS NULL;

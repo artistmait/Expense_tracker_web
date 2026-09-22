@@ -6,11 +6,11 @@ export const KPIMetricsRow = ({ metrics }) => {
   const [tooltipText, setTooltipText] = useState(null);
   const { formatAmount, symbol } = useCurrency();
 
-  const netCashflow   = metrics?.totalIncome  - metrics?.totalExpenses || 8420;
-  const totalIncome   = metrics?.totalIncome   || 8420;
-  const totalExpenses = metrics?.totalExpenses || 3150.20;
-  const savingsRate   = metrics?.savingsRate   || 62.5;
-  const runway        = metrics?.emergencyFundMonths || 14.2;
+  const totalIncome   = metrics?.totalIncome ?? 0;
+  const totalExpenses = metrics?.totalExpenses ?? 0;
+  const netCashflow   = totalIncome - totalExpenses;
+  const savingsRate   = metrics?.savingsRate ?? 0;
+  const runway        = metrics?.runwayMonths ?? metrics?.smartRunway ?? (totalExpenses > 0 ? Math.max(0, Math.round((netCashflow / totalExpenses) * 10) / 10) : 0);
 
   const kpis = [
     {
@@ -99,7 +99,7 @@ export const KPIMetricsRow = ({ metrics }) => {
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
-                  width: kpi.id === 'savingsRate' ? `${savingsRate}%` : kpi.id === 'smartRunway' ? '85%' : '100%',
+                  width: kpi.id === 'savingsRate' ? `${Math.min(100, Math.max(0, savingsRate))}%` : kpi.id === 'smartRunway' ? `${Math.min(100, Math.round((runway / 12) * 100))}%` : '100%',
                   backgroundColor: kpi.id === 'totalExpenses' ? '#F43F5E' : '#4382DF'
                 }}
               />

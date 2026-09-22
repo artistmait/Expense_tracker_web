@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import { authApi } from '../services/authApi';
 import { useTheme } from './ThemeContext';
-import { useCurrency, LOCATION_CURRENCY_MAP } from './CurrencyContext';
+import { useCurrency } from './CurrencyContext';
 
 const AuthContext = createContext(null);
 
@@ -56,12 +56,12 @@ export const AuthProvider = ({ children }) => {
   }, [user, token]);
 
   const login = async (emailOrUsername, password) => {
-    try {
-      // Attempt backend API call
-      const res = await authApi.login({
-        identifier: emailOrUsername,
-        password: password,
-      });
+    // Attempt backend API call. Errors propagate so the UI shows the real
+    // reason (invalid credentials, server down) — FIX #7 (audit).
+    const res = await authApi.login({
+      identifier: emailOrUsername,
+      password: password,
+    });
 
       if (res.success && res.user) {
         const userCurrency = res.user.accounts?.[0]?.currency || 'USD';
@@ -87,46 +87,24 @@ export const AuthProvider = ({ children }) => {
         setAuthModalOpen(false);
         return { success: true };
       }
-    } catch (err) {
-      // If it is the default seeded user or demo account, support offline/local demo seamlessly
-      if (
-        emailOrUsername.toLowerCase().includes('maitreyee') || 
-        emailOrUsername.toLowerCase().includes('alex') || 
-        emailOrUsername.toLowerCase().includes('demo')
-      ) {
-        const demoUser = emailOrUsername.toLowerCase().includes('alex')
-          ? {
-              ...DEFAULT_USER,
-              name: "Alex Morgan",
-              username: "alexmorgan",
-              email: "alex.morgan@budgetmate.io",
-              avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256"
-            }
-          : DEFAULT_USER;
-
-        setUser(demoUser);
-        setToken("mock_jwt_demo_token");
-        setAuthModalOpen(false);
-        return { success: true, isMock: true };
-      }
-      throw err;
-    }
+      throw new Error(res.message || 'Login failed.');
   };
 
   const signup = async ({ name, username, email, password, initialAccount, sync_mock_bank, location }) => {
     const resolvedCurrency = initialAccount?.currency || 'USD';
     const resolvedLocation = location || 'United States';
-    try {
-      // Attempt backend API call
-      const res = await authApi.register({
-        username: username || (email ? email.split('@')[0] : 'user') + Math.floor(Math.random() * 100),
-        full_name: name || "New Member",
-        email: email,
-        password: password,
-        location: resolvedLocation,
-        initialAccount: initialAccount,
-        sync_mock_bank: !!sync_mock_bank,
-      });
+    // FIX #7 (audit): removed the mock-user signup fallback. If the backend
+    // registration fails, the error propagates and the user sees it — instead
+    // of being silently logged in as a fake profile whose data vanishes on reload.
+    const res = await authApi.register({
+      username: username || (email ? email.split('@')[0] : 'user') + Math.floor(Math.random() * 100),
+      full_name: name || "New Member",
+      email: email,
+      password: password,
+      location: resolvedLocation,
+      initialAccount: initialAccount,
+      sync_mock_bank: !!sync_mock_bank,
+    });
 
       if (res.success && res.user) {
         const newUser = {
@@ -147,31 +125,7 @@ export const AuthProvider = ({ children }) => {
         setAuthModalOpen(false);
         return { success: true, bankSync: res.bankSync };
       }
-    } catch (err) {
-      console.warn('[AuthContext] Backend register fallback:', err.message);
-      const newUser = {
-        ...DEFAULT_USER,
-        name: name || "Maitreyee Puranik",
-        username: username || "maitreyee",
-        email: email || "maitreyee.puranik@budgetmate.io",
-        currency: resolvedCurrency,
-        location: resolvedLocation,
-        accounts: [
-          {
-            id: 'acc-init',
-            account_name: initialAccount?.account_name || 'Chase Sapphire Checking',
-            account_type: initialAccount?.account_type || 'checking',
-            initial_balance: parseFloat(initialAccount?.initial_balance) || 8420.0,
-            currency: resolvedCurrency
-          }
-        ]
-      };
-      setUser(newUser);
-      setToken("mock_jwt_token");
-      updateCurrency(resolvedCurrency);
-      setAuthModalOpen(false);
-      return { success: true, isMock: true };
-    }
+      throw new Error(res.message || 'Registration failed.');
   };
 
   const updateUserProfile = async ({ full_name, username, email, avatar_url }) => {

@@ -1,0 +1,43 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+defaults:
+  run:
+    working-directory: et_backend
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      JWT_SECRET: ci-test-secret-not-for-production
+      DB_PASSWORD: ci-dummy-password
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: et_backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests (rule engine, budget helpers)
+        run: npm test
+
+      - name: Boot smoke test
+        # The exact class of failure this catches: a module importing a
+        # non-existent export crashed the entire server while unit tests
+        # stayed green (audit critical issue #1).
+        run: node -e "process.env.NODE_ENV='test'; import('./main/server.js').then(() => { console.log('SERVER BOOT OK'); process.exit(0); }).catch((e) => { console.error('BOOT FAIL:', e.message); process.exit(1); })"
+
+      - name: Security audit (non-blocking)
+        run: npm audit --audit-level=high || true

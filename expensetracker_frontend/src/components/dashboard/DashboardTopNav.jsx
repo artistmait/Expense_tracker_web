@@ -10,10 +10,11 @@ import {
   RotateCw,
   ChevronDown,
   Check,
+  Lightbulb,
   LogOut
 } from 'lucide-react';
 
-export const DashboardTopNav = ({ onOpenQuickAdd, onSyncTrigger, onOpenSettings }) => {
+export const DashboardTopNav = ({ onOpenQuickAdd, onSyncTrigger, onOpenSettings, onOpenAdvisor }) => {
   const { user, logout, updateUserCurrency } = useAuth();
   const { currencyCode, currency, symbol, updateCurrency } = useCurrency();
 
@@ -154,6 +155,15 @@ export const DashboardTopNav = ({ onOpenQuickAdd, onSyncTrigger, onOpenSettings 
         >
           <RotateCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
           <span>Sync New ({lastSyncText})</span>
+        </button>
+
+        <button
+          onClick={onOpenAdvisor}
+          className="flex items-center gap-1.5 rounded-lg border border-[#AACCD6]/50 px-3 py-1.5 text-xs font-semibold text-[#4382DF] transition-colors hover:border-[#4382DF] hover:bg-[#4382DF]/10"
+          title="Open spending advisor"
+        >
+          <Lightbulb className="h-3.5 w-3.5" />
+          Advisor
         </button>
 
 

@@ -76,7 +76,7 @@ export const ThemeProvider = ({ children }) => {
     try {
       const token = localStorage.getItem('budgetmate_token');
       if (token && token !== 'mock_jwt_token' && token !== 'mock_jwt_demo_token') {
-        await fetch('http://localhost:5000/api/auth/theme', {
+        await fetch(`${import.meta.env?.VITE_API_URL || 'http://localhost:5000/api'}/auth/theme`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',

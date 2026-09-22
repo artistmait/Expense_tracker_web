@@ -9,14 +9,13 @@ import { DashboardView } from './components/dashboard/DashboardView';
 import { AuthModal } from './components/auth/AuthModal';
 import { QuickAddModal } from './components/home/QuickAddModal';
 import { SetBudgetModal } from './components/dashboard/SetBudgetModal';
-import { financialData } from './data/mockFinancialData';
 import { transactionsApi } from './services/transactionsApi';
 import { budgetsApi } from './services/budgetsApi';
 
 function MainAppContent() {
   const { isAuthenticated, token, user } = useAuth();
   const { toast } = useToast();
-  const { formatAmount } = useCurrency();
+  const { formatAmount, convertFromUSD } = useCurrency();
 
   // ── Budget Alert Toast Dispatcher (Block 2.1c) ──────────────────────────
   const fireBudgetAlertToasts = useCallback((alerts = []) => {
@@ -67,14 +66,6 @@ function MainAppContent() {
       localStorage.setItem(`budgetmate_txs_${user.id}`, JSON.stringify(transactions));
     }
   }, [transactions, user?.id]);
-
-  // Load transactions and categories on authentication
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadBackendData();
-      loadBudgetProgress();
-    }
-  }, [isAuthenticated, token]);
 
   const loadBackendData = async () => {
     try {
@@ -150,20 +141,100 @@ function MainAppContent() {
     }
   }, [token, isRealToken]);
 
+  // Load transactions and categories on authentication (declared after the
+  // loaders it calls so the reference is valid — lint fix).
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Both loaders setState only after their first await; the react-compiler
+      // lint cannot prove that through the function boundary, so suppress it.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      loadBackendData();
+      loadBudgetProgress();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, token]);
+
   const handleOpenQuickAdd = (type = 'expense') => {
     setQuickAddType(type);
     setIsQuickAddOpen(true);
   };
 
-  // Transaction Addition with PostgreSQL persistence & optimistic state
+  // Transaction Addition — backend-first. The visible ledger only changes when
+  // the write actually succeeded (or in offline/mock mode where local-only is
+  // the intended behavior).
   const handleSaveEntry = async (newEntry) => {
     const isExpense = newEntry.transaction_type === 'expense' || newEntry.type === 'expense';
-    const numAmount = Math.abs(parseFloat(newEntry.amount));
+    // FIX #10 (audit): modal inputs arrive in the active display currency.
+    // Convert once here to the USD base used for ALL persistence, so every
+    // entry source (QuickAdd, ExpenseModal, filters) stores consistent units.
+    const displayAmount = Math.abs(parseFloat(newEntry.amount)) || 0;
+    const numAmount = Math.round((displayAmount / convertFromUSD(1)) * 100) / 100;
     const title = newEntry.t_desc || newEntry.title || 'Manual Entry';
     const dateVal = newEntry.t_date || new Date().toISOString().split('T')[0];
     const categoryName = newEntry.category_name || (typeof newEntry.category === 'string' ? newEntry.category : 'General');
-    const accountName = newEntry.account_name || newEntry.account || user?.accounts?.[0]?.account_name || 'Main Checking';
 
+    // Immediate Client-Side Budget Over-Spend Check (USD-base ledger)
+    if (isExpense && newEntry.category_id) {
+      const targetBudget = budgetProgress.find(b => b.category_id === newEntry.category_id);
+      if (targetBudget) {
+        const allocated = parseFloat(targetBudget.allocated_amount || targetBudget.amount || 0);
+        if (allocated > 0) {
+          const priorSpent = transactions
+            .filter(t => t.category_id === newEntry.category_id && (t.transaction_type === 'expense' || parseFloat(t.amount) < 0))
+            .reduce((sum, t) => sum + Math.abs(parseFloat(t.amount || 0)), 0);
+          const totalAfter = priorSpent + numAmount;
+          const pct = Math.round((totalAfter / allocated) * 100);
+          if (totalAfter > allocated) {
+            toast.error(
+              `🚨 Over Budget! ${categoryName} is now at ${pct}% of its budget limit (${formatAmount(totalAfter)} of ${formatAmount(allocated)}).`,
+              'Budget Exceeded'
+            );
+          } else if (pct >= 80) {
+            toast.warning(
+              `⚠️ Budget Warning: ${categoryName} is approaching its limit (${pct}% used: ${formatAmount(totalAfter)} of ${formatAmount(allocated)}).`,
+              'Approaching Budget'
+            );
+          }
+        }
+      }
+    }
+
+    if (isRealToken) {
+      try {
+        const res = await transactionsApi.createTransaction(token, {
+          amount: numAmount,
+          transaction_type: isExpense ? 'expense' : 'income',
+          t_desc: title,
+          // FIX #9 (audit): never send display strings as account ids — an
+          // absent account_id lets the backend resolve the user's default.
+          account_id: newEntry.account_id || null,
+          category_id: newEntry.category_id || null,
+          t_date: dateVal,
+          is_reccuring: !!newEntry.is_reccuring
+        });
+        // FIX #7 (audit): no optimistic insert — the ledger is refreshed from
+        // the server so UI state can never silently diverge from the database.
+        await loadBackendData();
+        await loadBudgetProgress();
+        if (res?.budget_alerts) {
+          fireBudgetAlertToasts(res.budget_alerts);
+        }
+        toast.success(
+          `${isExpense ? 'Expense' : 'Income'} of ${formatAmount(numAmount)} recorded.`,
+          'Entry Saved'
+        );
+      } catch (err) {
+        // FIX #7 (audit): honest failure — nothing was recorded anywhere.
+        console.error('[App] Failed to save transaction:', err);
+        toast.error(
+          err.message || 'Failed to save entry. Nothing was recorded — please try again.',
+          'Save Failed'
+        );
+      }
+      return;
+    }
+
+    // Offline / mock mode: local-only ledger (no backend to reconcile with).
     const optimisticTx = {
       id: `tx-${Date.now()}`,
       title,
@@ -177,41 +248,22 @@ function MainAppContent() {
       amount: isExpense ? -numAmount : numAmount,
       transaction_type: isExpense ? 'expense' : 'income',
       account_id: newEntry.account_id,
-      account_name: accountName,
+      account_name: newEntry.account_name || 'Main Checking',
       is_reccuring: !!newEntry.is_reccuring,
     };
-
     setTransactions(prev => [optimisticTx, ...prev]);
-
-    try {
-      if (isRealToken) {
-        const res = await transactionsApi.createTransaction(token, {
-          amount: numAmount,
-          transaction_type: isExpense ? 'expense' : 'income',
-          t_desc: title,
-          account_id: newEntry.account_id || newEntry.account,
-          category_id: newEntry.category_id,
-          t_date: dateVal,
-          is_reccuring: !!newEntry.is_reccuring
-        });
-        // Fire budget alerts returned from server
-        fireBudgetAlertToasts(res?.budget_alerts);
-        await loadBackendData();
-        await loadBudgetProgress();
-      }
-      toast.success(
-        `${isExpense ? 'Expense' : 'Income'} of ${formatAmount(numAmount)} recorded.`,
-        'Entry Saved'
-      );
-    } catch (err) {
-      toast.warning('Entry saved locally and queued for cloud sync.', 'Saved Locally');
-    }
+    toast.success(
+      `${isExpense ? 'Expense' : 'Income'} of ${formatAmount(numAmount)} recorded locally.`,
+      'Entry Saved'
+    );
   };
 
   // Transaction Update handler
   const handleUpdateTransaction = async (id, updatedFields) => {
-    const numAmount = Math.abs(parseFloat(updatedFields.amount));
+    // FIX #10 (audit): display-currency input → USD base for persistence.
+    const numAmount = Math.round((Math.abs(parseFloat(updatedFields.amount)) || 0) / convertFromUSD(1) * 100) / 100;
     const isExpense = updatedFields.transaction_type === 'expense';
+    const prevTransactions = transactions;
 
     setTransactions(prev =>
       prev.map(t =>
@@ -227,44 +279,69 @@ function MainAppContent() {
       )
     );
 
+    if (!isRealToken) {
+      toast.success('Transaction updated successfully.', 'Entry Updated');
+      return;
+    }
+
     try {
-      if (isRealToken) {
-        const res = await transactionsApi.updateTransaction(token, id, {
-          amount: numAmount,
-          transaction_type: updatedFields.transaction_type,
-          t_desc: updatedFields.t_desc || updatedFields.title,
-          category_id: updatedFields.category_id,
-          account_id: updatedFields.account_id,
-          t_date: updatedFields.t_date,
-          is_reccuring: updatedFields.is_reccuring
-        });
-        // Fire budget alerts returned from server
-        fireBudgetAlertToasts(res?.budget_alerts);
-        await loadBackendData();
-        await loadBudgetProgress();
-      }
+      const res = await transactionsApi.updateTransaction(token, id, {
+        amount: numAmount,
+        transaction_type: updatedFields.transaction_type,
+        t_desc: updatedFields.t_desc || updatedFields.title,
+        category_id: updatedFields.category_id,
+        account_id: updatedFields.account_id || null,
+        t_date: updatedFields.t_date,
+        is_reccuring: updatedFields.is_reccuring
+      });
+      // Fire budget alerts returned from server
+      fireBudgetAlertToasts(res?.budget_alerts);
+      await loadBackendData();
+      await loadBudgetProgress();
       toast.success('Transaction updated successfully.', 'Entry Updated');
     } catch (err) {
-      console.warn('[App] Update fallback local:', err.message);
+      // FIX #7 (audit): roll the optimistic edit back instead of keeping UI
+      // state that silently diverges from the database.
+      console.error('[App] Failed to update transaction:', err);
+      setTransactions(prevTransactions);
+      toast.error(err.message || 'Failed to update transaction. Change was not saved.', 'Update Failed');
     }
   };
 
   // Transaction Deletion handler
   const handleDeleteTransaction = async (id) => {
+    const prevTransactions = transactions;
     setTransactions(prev => prev.filter(t => t.id !== id));
+    if (!isRealToken) return;
+
     try {
-      if (isRealToken) {
-        await transactionsApi.deleteTransaction(token, id);
-        await loadBackendData();
-        await loadBudgetProgress();
-      }
+      await transactionsApi.deleteTransaction(token, id);
+      await loadBackendData();
+      await loadBudgetProgress();
     } catch (err) {
-      console.warn('[App] Delete fallback local:', err.message);
+      // FIX #7 (audit): restore the row when the server rejects the delete.
+      console.error('[App] Failed to delete transaction:', err);
+      setTransactions(prevTransactions);
+      toast.error(err.message || 'Failed to delete transaction.', 'Delete Failed');
     }
   };
 
-  // Budget Save Handler
+  // Budget Save Handler with Immediate Over-Budget Detection
   const handleSaveBudget = async (budgetData) => {
+    // FIX #10 (audit): budget inputs arrive in the active display currency;
+    // store the USD base like every other persisted amount.
+    const numLimit = Math.round((parseFloat(budgetData.amount) || 0) / convertFromUSD(1) * 100) / 100;
+    const targetCatId = budgetData.category_id;
+    const catObj = categories.find(c => c.id === targetCatId);
+    const catName = catObj?.category_name || 'Category';
+
+    // Calculate current spending for this category
+    const catExpenses = transactions.filter(t =>
+      (t.category_id === targetCatId || (t.category_name && t.category_name === catName)) &&
+      (t.transaction_type === 'expense' || parseFloat(t.amount) < 0)
+    );
+    const currentSpent = catExpenses.reduce((sum, t) => sum + Math.abs(parseFloat(t.amount || 0)), 0);
+
     try {
       if (isRealToken) {
         await budgetsApi.createOrUpdateBudget(token, {
@@ -273,11 +350,46 @@ function MainAppContent() {
           period: budgetData.period || 'monthly'
         });
         await loadBudgetProgress();
+      } else {
+        // Update local budgetProgress optimistically for mock/guest users
+        setBudgetProgress(prev => {
+          const filtered = prev.filter(b => b.category_id !== targetCatId);
+          return [...filtered, {
+            id: `b-${Date.now()}`,
+            category_id: targetCatId,
+            category_name: catName,
+            allocated_amount: numLimit,
+            amount: numLimit,
+            spent_amount: currentSpent,
+            period: budgetData.period || 'monthly'
+          }];
+        });
       }
+
       toast.success(
-        `Budget of ${formatAmount(Number(budgetData.amount))} set successfully.`,
-        'Budget Updated'
+        `Budget limit of ${formatAmount(numLimit)} set for ${catName}.`,
+        'Budget Saved'
       );
+
+      // ── Immediate Over-Budget Toast Notification (when current spend exceeds or nears new limit) ──
+      if (numLimit > 0 && currentSpent > 0) {
+        const pct = Math.round((currentSpent / numLimit) * 100);
+        if (currentSpent > numLimit) {
+          setTimeout(() => {
+            toast.error(
+              `🚨 Over Budget Alert: Current spending on ${catName} (${formatAmount(currentSpent)}) exceeds your newly set limit of ${formatAmount(numLimit)} by ${formatAmount(currentSpent - numLimit)} (${pct}% used)!`,
+              'Budget Exceeded'
+            );
+          }, 400);
+        } else if (pct >= 80) {
+          setTimeout(() => {
+            toast.warning(
+              `⚠️ Budget Warning: ${catName} has already consumed ${pct}% (${formatAmount(currentSpent)}) of your new ${formatAmount(numLimit)} budget.`,
+              'Near Budget Limit'
+            );
+          }, 400);
+        }
+      }
     } catch (err) {
       toast.error(err.message || 'Failed to save budget. Please try again.', 'Budget Error');
       throw err;
@@ -307,51 +419,32 @@ function MainAppContent() {
 
   // Mock Bank Feed Sync
   const handleSyncBankData = async () => {
+    if (!isRealToken) {
+      toast.info('Bank sync is available once you sign in with a real account.', 'Bank Feeds');
+      return { success: false, message: 'Sign-in required.' };
+    }
     try {
-      if (isRealToken) {
-        const res = await transactionsApi.syncBank(token);
-        if (res.transactions) setTransactions(res.transactions);
-        await loadBudgetProgress();
-        toast.success(
-          res.message || 'Bank feed synchronized with Mock Banking Service.',
-          'Sync Complete'
-        );
+      const res = await transactionsApi.syncBank(token);
+      // FIX #7 (audit): the backend now reports success:false when the upstream
+      // feed is unavailable — surface that honestly instead of claiming success.
+      if (res.success === false) {
+        toast.warning(res.message || 'Bank feed unavailable. Nothing was imported.', 'Sync Unavailable');
         return res;
       }
+      if (res.transactions) setTransactions(res.transactions);
+      await loadBudgetProgress();
+      toast.success(
+        res.message || 'Bank feed synchronized with Mock Banking Service.',
+        'Sync Complete'
+      );
+      return res;
     } catch (err) {
-      console.warn('[App] Backend sync error, running local fallback sync:', err.message);
+      // FIX #7 (audit): the old code swallowed real failures into a fake
+      // "No external bank transactions linked" success toast.
+      console.error('[App] Backend sync error:', err);
+      toast.error(err.message || 'Bank sync failed. Please try again later.', 'Sync Failed');
+      return { success: false, message: err.message };
     }
-
-    // Local simulation fallback
-    const simulatedSyncedTx = [
-      {
-        id: `tx-sync-${Date.now()}-1`,
-        merchant: 'AWS Cloud Infrastructure',
-        t_desc: 'AWS Cloud Infrastructure',
-        category_name: 'Tech, AI & Subscriptions',
-        account_name: 'Chase Sapphire Checking',
-        amount: -1420.00,
-        transaction_type: 'expense',
-        is_reccuring: true,
-        t_date: 'Today'
-      },
-      {
-        id: `tx-sync-${Date.now()}-2`,
-        merchant: 'Tech Global Inc.',
-        t_desc: 'Tech Global Payroll Direct Deposit',
-        category_name: 'Salary & Direct Deposit',
-        account_name: 'Chase Sapphire Checking',
-        amount: 8420.00,
-        transaction_type: 'income',
-        is_reccuring: true,
-        t_date: 'Yesterday'
-      },
-      ...transactions
-    ];
-
-    setTransactions(simulatedSyncedTx);
-    toast.success('Synced 8 transactions from Mock Bank API.', 'Bank Sync');
-    return { success: true, message: 'Synced 8 transactions from Mock Bank API.' };
   };
 
   return (
@@ -384,20 +477,14 @@ function MainAppContent() {
         onClose={() => setIsQuickAddOpen(false)}
         initialType={quickAddType}
         onSave={handleSaveEntry}
+        accounts={user?.accounts || []}
+        categories={categories}
       />
 
       <SetBudgetModal
         isOpen={isBudgetModalOpen}
         onClose={() => setIsBudgetModalOpen(false)}
-        categories={categories.length > 0 ? categories : [
-          { id: 'cat-housing', category_name: 'Housing & Utilities' },
-          { id: 'cat-food', category_name: 'Food & Dining' },
-          { id: 'cat-tech', category_name: 'Tech, AI & Subscriptions' },
-          { id: 'cat-groceries', category_name: 'Groceries' },
-          { id: 'cat-transport', category_name: 'Transportation & Gas' },
-          { id: 'cat-ent', category_name: 'Entertainment & Leisure' },
-          { id: 'cat-health', category_name: 'Health & Wellness' },
-        ]}
+        categories={categories}
         budgets={budgetProgress}
         currentSpendMap={budgetSpendMap}
         onSaveBudget={handleSaveBudget}
